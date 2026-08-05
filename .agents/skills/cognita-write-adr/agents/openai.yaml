@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cognita Write ADR"
+  short_description: "Registre decisões arquiteturais oficiais Cognita"
+  default_prompt: "Use $cognita-write-adr para registrar esta decisão arquitetural conforme o CEF."

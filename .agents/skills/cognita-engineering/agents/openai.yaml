@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cognita Engineering"
+  short_description: "Aplique a governança oficial de engenharia Cognita"
+  default_prompt: "Use $cognita-engineering para governar esta tarefa técnica conforme o CEF."

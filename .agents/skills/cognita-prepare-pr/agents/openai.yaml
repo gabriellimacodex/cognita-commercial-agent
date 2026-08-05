@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cognita Prepare PR"
+  short_description: "Prepare Pull Requests completos e verificáveis"
+  default_prompt: "Use $cognita-prepare-pr para preparar esta Pull Request conforme o CEF."
