@@ -1,7 +1,8 @@
 # Constituição da Engenharia da Cognita
 
-**Versão:** 1.0.0  
-**Status:** Ratificada  
+**Versão:** 1.0.0
+
+**Status:** Ratificada
 **Ratificação:** 2026-08-05
 
 ## Autoridade
