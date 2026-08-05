@@ -1,87 +1,48 @@
-# AGENTS.md — Cognita Commercial Agent
+# AGENTS.md — Cognita Engineering Framework
 
-## Missão
+Este arquivo é o ponto de entrada obrigatório para qualquer agente que trabalhe neste repositório.
 
-Construir um funcionário comercial digital confiável, auditável e mensurável para a operação da Cognita.
+## Autoridade
 
-## Princípios obrigatórios
+Aplicar a seguinte ordem de precedência:
 
-1. Código decide.
-2. n8n executa integrações e ações externas.
-3. PostgreSQL é a fonte de verdade.
-4. Toda ação deve ser auditável.
-5. Nenhuma regra crítica pode existir apenas no n8n.
-6. Toda saída de IA deve ser estruturada e validada por schema.
-7. Toda integração externa deve ser idempotente.
-8. Nenhuma mensagem pode ser enviada sem verificar o estado atual do lead.
-9. Nenhum segredo pode ser versionado.
-10. Toda funcionalidade deve incluir testes e critérios de aceite.
+1. instruções explícitas e autorizadas da tarefa;
+2. este `AGENTS.md`;
+3. [Constituição da Engenharia](docs/engineering/constitution.md);
+4. ADRs aceitas em [docs/adr](docs/adr/README.md);
+5. [padrões obrigatórios](docs/engineering/standards);
+6. [convenções](docs/engineering/conventions);
+7. [workflows](docs/engineering/workflows);
+8. checklists e templates aplicáveis.
 
-## Stack padrão
+Interromper o trabalho e solicitar decisão humana quando houver conflito material entre autoridades, escopo ambíguo, risco não autorizado ou ausência de decisão obrigatória.
 
-- TypeScript
-- Node.js
-- Fastify ou NestJS
-- PostgreSQL
-- Redis
-- BullMQ
-- Next.js
-- Zod
-- Docker Compose
-- n8n self-hosted
+## Leitura obrigatória
 
-## Fronteira código x n8n
+Antes de qualquer trabalho técnico:
 
-### Código
+1. Ler integralmente este arquivo.
+2. Ler integralmente `docs/engineering/constitution.md`.
+3. Consultar `docs/engineering/README.md` para selecionar os documentos aplicáveis.
+4. Ler as ADRs aceitas relacionadas ao escopo.
+5. Invocar as Skills CEF pertinentes em `.agents/skills`.
+6. Ler os documentos de produto relacionados sem reinterpretar seu escopo.
 
-- memória do lead;
-- estado comercial;
-- qualificação;
-- score;
-- regras;
-- próxima melhor ação;
-- permissões;
-- prompts;
-- auditoria;
-- deduplicação;
-- métricas;
-- controle de follow-up.
+## Execução
 
-### n8n
+Seguir o [workflow do ciclo de mudança](docs/engineering/workflows/change-lifecycle.md) e os Standards selecionados pelo [índice do CEF](docs/engineering/README.md). Este portal não redefine suas normas.
 
-- webhooks;
-- envio de WhatsApp;
-- agenda;
-- CRM externo;
-- e-mail;
-- alertas;
-- enriquecimento;
-- sincronizações;
-- retries de integrações.
+## Skills oficiais
 
-## Regras de implementação
+- `cognita-engineering`: orientar qualquer tarefa técnica pelo CEF.
+- `cognita-plan-change`: planejar mudanças antes da implementação.
+- `cognita-write-adr`: criar ou substituir decisões arquiteturais.
+- `cognita-implement-change`: executar somente planos autorizados.
+- `cognita-review-change`: revisar mudanças por risco e evidência.
+- `cognita-prepare-pr`: preparar Pull Requests completos e verificáveis.
 
-- Planejar antes de escrever código.
-- Não expandir escopo sem necessidade.
-- Preferir módulos pequenos e coesos.
-- Criar migrations versionadas.
-- Criar logs estruturados.
-- Usar chaves de idempotência em comandos externos.
-- Tratar falhas com retries seguros e dead-letter queue.
-- Não acoplar o domínio a fornecedores externos.
-- Não acoplar o sistema a um único modelo de IA.
+As Skills coordenam o processo e referenciam as fontes oficiais. Elas não substituem nem duplicam a documentação normativa.
 
-## Definition of Done
+## Estado atual do produto
 
-Uma tarefa só está concluída quando:
-
-- o código compila;
-- lint passa;
-- typecheck passa;
-- testes passam;
-- critérios de aceite estão cobertos;
-- documentação foi atualizada;
-- não há segredos expostos;
-- há logs adequados;
-- há tratamento de erro;
-- a mudança respeita a arquitetura.
+A implementação do Cognita Commercial Agent permanece suspensa até autorização explícita posterior. Trabalhos no CEF não autorizam mudanças em API, banco, Docker, Redis, n8n, worker, cockpit, IA ou lógica comercial.
