@@ -309,6 +309,7 @@ export function checkCefStructure(root) {
     ".agents/skills",
     ".github/CODEOWNERS",
     ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/rulesets/main.json",
     "docs/adr/README.md",
     "docs/engineering/README.md",
     "docs/engineering/constitution.md",
@@ -321,6 +322,58 @@ export function checkCefStructure(root) {
   ];
   for (const item of required) {
     if (!existsSync(path.join(root, item))) errors.push(`${item}: required CEF path is missing`);
+  }
+
+  const rulesetPath = path.join(root, ".github/rulesets/main.json");
+  if (existsSync(rulesetPath)) {
+    try {
+      const ruleset = JSON.parse(readFileSync(rulesetPath, "utf8"));
+      const ruleByType = new Map((ruleset.rules || []).map((rule) => [rule.type, rule]));
+      const bypass = ruleset.bypass_actors || [];
+      const pullRequest = ruleByType.get("pull_request")?.parameters;
+      const statusChecks = ruleByType.get("required_status_checks")?.parameters;
+
+      if (ruleset.name !== "main-protection-single-maintainer") {
+        errors.push(".github/rulesets/main.json: unexpected Ruleset name");
+      }
+      if (ruleset.target !== "branch") errors.push(".github/rulesets/main.json: target must be branch");
+      if (!["disabled", "active"].includes(ruleset.enforcement)) {
+        errors.push(".github/rulesets/main.json: enforcement must be disabled or active");
+      }
+      if (JSON.stringify(ruleset.conditions?.ref_name) !== JSON.stringify({ include: ["~DEFAULT_BRANCH"], exclude: [] })) {
+        errors.push(".github/rulesets/main.json: Ruleset must target only the default branch");
+      }
+      if (JSON.stringify(bypass) !== JSON.stringify([{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "pull_request" }])) {
+        errors.push(".github/rulesets/main.json: bypass must be limited to the administrator role in pull_request mode");
+      }
+      if (!ruleByType.has("deletion")) errors.push(".github/rulesets/main.json: deletion protection is required");
+      if (!ruleByType.has("non_fast_forward")) errors.push(".github/rulesets/main.json: force-push protection is required");
+      if (!pullRequest) {
+        errors.push(".github/rulesets/main.json: pull_request rule is required");
+      } else {
+        if (pullRequest.required_approving_review_count !== 0) {
+          errors.push(".github/rulesets/main.json: Single Maintainer requires zero approvals");
+        }
+        if (pullRequest.require_code_owner_review !== false || pullRequest.require_last_push_approval !== false) {
+          errors.push(".github/rulesets/main.json: nonexistent independent approvals must not be required");
+        }
+        if (pullRequest.required_review_thread_resolution !== true) {
+          errors.push(".github/rulesets/main.json: conversation resolution is required");
+        }
+      }
+      if (!statusChecks) {
+        errors.push(".github/rulesets/main.json: required_status_checks rule is required");
+      } else {
+        if (statusChecks.strict_required_status_checks_policy !== true) {
+          errors.push(".github/rulesets/main.json: the branch must be current before merge");
+        }
+        if (JSON.stringify(statusChecks.required_status_checks) !== JSON.stringify([{ context: "CEF Governance", integration_id: 15368 }])) {
+          errors.push(".github/rulesets/main.json: CEF Governance must be the only required check and come from GitHub Actions");
+        }
+      }
+    } catch (error) {
+      errors.push(`.github/rulesets/main.json: invalid JSON (${error.message})`);
+    }
   }
 
   const agentPortal = existsSync(path.join(root, "AGENTS.md")) ? readFileSync(path.join(root, "AGENTS.md"), "utf8") : "";

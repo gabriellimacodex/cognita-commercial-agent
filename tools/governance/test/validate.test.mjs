@@ -40,6 +40,13 @@ function createSkillFixture(root) {
   }
 }
 
+function createCefFixture(root) {
+  for (const entry of [".agents", ".github", "docs"]) {
+    cpSync(path.join(repoRoot, entry), path.join(root, entry), { recursive: true });
+  }
+  cpSync(path.join(repoRoot, "AGENTS.md"), path.join(root, "AGENTS.md"));
+}
+
 function readable(file) {
   try {
     readFileSync(file);
@@ -81,6 +88,18 @@ test("invalid openai YAML fails", () => {
   const result = run("skill-metadata", root);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /invalid YAML/);
+});
+
+test("unsafe Single Maintainer Ruleset fails", () => {
+  const root = temporaryDirectory();
+  createCefFixture(root);
+  const target = path.join(root, ".github/rulesets/main.json");
+  const ruleset = JSON.parse(readFileSync(target, "utf8"));
+  ruleset.bypass_actors[0].bypass_mode = "always";
+  writeFileSync(target, `${JSON.stringify(ruleset, null, 2)}\n`);
+  const result = run("cef-structure", root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /bypass must be limited/);
 });
 
 test("prohibited placeholder marker fails", () => {
