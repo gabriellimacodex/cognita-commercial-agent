@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cognita Plan Change"
+  short_description: "Planeje mudanças técnicas conforme o CEF"
+  default_prompt: "Use $cognita-plan-change para produzir um plano técnico verificável antes da implementação."

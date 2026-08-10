@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cognita Implement Change"
+  short_description: "Implemente mudanças aprovadas sob governança CEF"
+  default_prompt: "Use $cognita-implement-change para executar este plano aprovado com as verificações do CEF."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cognita Review Change"
+  short_description: "Revise mudanças por risco e evidência"
+  default_prompt: "Use $cognita-review-change para revisar esta mudança conforme os critérios do CEF."
