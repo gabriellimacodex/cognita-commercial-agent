@@ -10,6 +10,14 @@ O modo ativo é `Single Maintainer`.
 
 Nesse modo, uma única pessoa pode concentrar autoria, decisão e merge, mas cada papel precisa permanecer distinguível nas evidências. Concentração operacional não transforma self-review em revisão independente nem revisão de agente em aprovação humana.
 
+## Automação do repositório
+
+A ADR 004 define o bootstrap automatizado sem alterar o modo ativo. A fonte local das validações fica em `tools/governance`; GitHub Actions executa os mesmos comandos e publica somente o check externo `CEF Governance`.
+
+Quando configurado, esse check não pode ser substituído por evidência local. O Ruleset de `main` exige Pull Request, branch atualizada, conversas resolvidas e `CEF Governance`, sem exigir aprovação humana inexistente.
+
+O estado desejado do Ruleset é versionado em `.github/rulesets/main.json`. A verificação read-only documentada em `tools/governance/README.md` compara esse arquivo com a configuração efetiva do GitHub.
+
 ## Operação por um único mantenedor
 
 Para cada mudança material:
@@ -84,6 +92,8 @@ Indisponibilidade temporária de CI deve ser tratada como falha operacional. Nã
 Mudança emergencial segue `emergency-change.md`. O modo de governança não transforma prazo em emergência nem permite esconder bypass.
 
 Toda exceção precisa registrar autoridade, motivo, risco, evidência mínima, rollback e reconciliação posterior.
+
+Bypass do Ruleset pertence exclusivamente ao papel real de administrador e ao modo `pull_request`. Ele não aprova conteúdo, não transforma check falho em check aprovado e só pode ser usado quando o caso satisfizer o workflow de mudança emergencial.
 
 ## Evidências de maturidade
 

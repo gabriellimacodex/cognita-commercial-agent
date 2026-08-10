@@ -31,6 +31,8 @@
 - Revisores humanos disponíveis:
 - Limitações de independência:
 - Origem das verificações: <!-- CI, validação local ou combinação; checks inexistentes devem ser declarados -->
+- `CEF Governance`:
+- Bypass utilizado: <!-- não | sim, com referência à mudança emergencial -->
 
 ## Evidências e testes
 

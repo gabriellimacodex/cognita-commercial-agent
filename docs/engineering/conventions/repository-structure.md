@@ -7,6 +7,7 @@
 - `docs/adr`: decisões arquiteturais.
 - `docs/engineering`: governança CEF.
 - `docs/rfcs`: investigações arquiteturais não autorizadoras e seu índice.
+- `tools/governance`: automação local e testes que materializam validações objetivas do CEF.
 - `docs/*.md`: documentação de produto existente até reorganização explicitamente aprovada.
 - `apps`: aplicações executáveis quando autorizadas.
 - `packages`: bibliotecas compartilhadas com consumidores concretos.
