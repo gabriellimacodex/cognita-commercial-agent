@@ -86,6 +86,19 @@ O protocolo comum pertence à coordenação. Regras e dados permanecem nos domí
 
 `Skill` é uma forma de oferecer `Capability` a um funcionário digital; não é entidade obrigatória em todo domínio.
 
+### 7.1 Representatividade mínima
+
+| Caso | Subject | Objective | Gates e evidências típicos | Semântica que permanece no domínio |
+|---|---|---|---|---|
+| Pull Request | conjunto de mudança | integrar mudança verificável | plano, ADR, testes, checks e revisão | contratos, risco técnico e estado do GitHub |
+| Venda | lead ou oportunidade | alcançar Outcome comercial autorizado | consentimento, qualificação, confiança e histórico | score, estágio, oferta e próxima melhor ação |
+| Atendimento | solicitação ou incidente | resolver ou encaminhar corretamente | identidade, prioridade, SLA e confirmação | severidade, solução e política de suporte |
+| Cobrança | obrigação financeira | receber, reconciliar ou escalar | vencimento, autorização, ledger e comprovante | saldo, disputa, juros e estado contábil |
+| Contratação | candidato e requisição | contratar, rejeitar ou encerrar com decisão válida | consentimento, avaliações e aprovações | critérios da vaga, dados pessoais e decisão trabalhista |
+| Processo interno | solicitação operacional | produzir resultado organizacional verificável | autoridade, prazo, artefatos e aceite | política e responsabilidade da área proprietária |
+
+A tabela demonstra representatividade conceitual, não equivalência semântica. Nenhum estado, gate ou dado específico deve migrar para um núcleo universal por aparecer nessa comparação.
+
 ## 8. Máquina de estados
 
 O modelo separa duas máquinas.
