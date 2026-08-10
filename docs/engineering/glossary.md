@@ -19,7 +19,10 @@
 - **Checklist:** instrumento de verificação; não cria regras novas.
 - **Template:** estrutura para registrar evidências de modo consistente.
 - **Skill:** instrução operacional versionada para orientar o Codex pelo CEF.
+- **RFC:** investigação arquitetural que registra hipótese, contrapontos e disposição sem autorizar implementação.
 - **Fonte canônica:** único documento autorizado a definir um conceito.
+- **Single Maintainer:** modo de bootstrap em que não existe capacidade para todos os gates humanos ou automatizados do modo de equipe.
+- **Engineering Team:** modo em que revisores humanos, CI e proteções satisfazem os gates integrais do CEF.
 
 ## Entrega
 
@@ -40,6 +43,10 @@
 
 ## Revisão
 
+- **Self-review:** revisão executada pelo autor sobre a própria mudança; não é independente.
+- **Revisão assistida:** revisão produzida com apoio de agente ou automação; não equivale a aprovação humana.
+- **Revisão humana independente:** revisão realizada por pessoa elegível distinta do autor.
+- **Autoaprovação:** representação indevida de decisão do autor como aprovação independente; merge autorizado pelo modo ativo não constitui autoaprovação.
 - **Blocking:** achado que impede aprovação.
 - **Non-blocking:** melhoria recomendada que não impede aprovação.
 - **Question:** pedido de esclarecimento necessário para avaliar a mudança.

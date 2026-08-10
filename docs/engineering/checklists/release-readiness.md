@@ -1,7 +1,7 @@
 # Checklist de Release Readiness
 
 - [ ] Escopo da release está identificado.
-- [ ] CI e verificações obrigatórias estão verdes.
+- [ ] Checks configurados e verificações exigidas pelo modo ativo estão verdes; substituições locais permitidas estão documentadas.
 - [ ] Artefato é reproduzível e versões estão fixadas.
 - [ ] Configuração e secrets necessários estão disponíveis.
 - [ ] Migrations foram avaliadas e ordenadas.

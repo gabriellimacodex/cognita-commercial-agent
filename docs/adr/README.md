@@ -38,3 +38,4 @@ Uma ADR `Accepted` não deve ser alterada materialmente. Criar nova ADR para sub
 |---|---|---|
 | [001](001-cognita-engineering-framework.md) | Adotar o Cognita Engineering Framework | Accepted |
 | [002](002-repository-local-codex-skills.md) | Versionar Skills CEF no repositório | Accepted |
+| [003](003-single-maintainer-governance.md) | Operar a governança com um único mantenedor | Accepted |

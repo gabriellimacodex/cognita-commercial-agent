@@ -16,6 +16,7 @@ Este diretório contém a governança oficial de engenharia da Cognita. Cada con
 | Verificação de conformidade | [Checklists](checklists) |
 | Estrutura de documentos | [Templates](templates) |
 | Decisões arquiteturais | [ADRs](../adr/README.md) |
+| Investigações arquiteturais | [RFCs](../rfcs/README.md) |
 
 ## Como selecionar documentos
 
@@ -27,6 +28,8 @@ Este diretório contém a governança oficial de engenharia da Cognita. Cada con
 - Para segurança, consultar `standards/security.md`, `standards/configuration-and-secrets.md` e `checklists/security.md`.
 - Para revisão, seguir `workflows/code-review.md` e os checklists de self-review e reviewer.
 - Para PR, seguir `workflows/pull-request.md` e `.github/PULL_REQUEST_TEMPLATE.md`.
+- Para operar com um único mantenedor, seguir `workflows/governance-bootstrap.md` e a ADR que define o modo ativo.
+- Para consultar exploração arquitetural não autorizadora, usar `../rfcs/README.md`.
 
 ## Política de fonte única
 
@@ -37,6 +40,7 @@ Este diretório contém a governança oficial de engenharia da Cognita. Cada con
 - Checklists validam execução e não criam novas regras.
 - Templates estruturam evidências e apontam para as regras aplicáveis.
 - ADRs registram decisões específicas e não substituem manuais operacionais.
+- RFCs investigam hipóteses e não autorizam implementação nem substituem ADRs.
 
 ## Manutenção
 

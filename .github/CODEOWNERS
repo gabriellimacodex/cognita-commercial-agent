@@ -1,9 +1,11 @@
 # Ownership padrão do repositório
 * @gabriellimacodex
 
-# Governança CEF e Skills
+# CODEOWNERS roteia responsabilidade; aprovações seguem o workflow de Pull Request.
+# Governança CEF, Skills, ADRs e RFCs
 /AGENTS.md @gabriellimacodex
 /.agents/ @gabriellimacodex
 /docs/engineering/ @gabriellimacodex
 /docs/adr/ @gabriellimacodex
+/docs/rfcs/ @gabriellimacodex
 /.github/ @gabriellimacodex

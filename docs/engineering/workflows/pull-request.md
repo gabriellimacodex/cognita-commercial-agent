@@ -3,6 +3,7 @@
 ## 1. Preparação
 
 - Confirmar branch e intenção principal.
+- Identificar o modo de governança ativo pela ADR vigente.
 - Atualizar a branch com segurança.
 - Revisar o diff completo contra a base.
 - Executar checklists aplicáveis.
@@ -20,31 +21,50 @@ Preencher `.github/PULL_REQUEST_TEMPLATE.md` sem remover seções obrigatórias.
 
 ## 4. CI
 
-- Aguardar verificações obrigatórias.
+- Aguardar todo check configurado e obrigatório.
 - Investigar falhas; não repetir jobs até mascarar flakiness.
-- Documentar teste não executado e motivo.
+- Nunca substituir manualmente um check existente.
+- No modo `Single Maintainer`, quando um check ainda não existir, registrar validação local reproduzível com comando, resultado e limitação.
+- No modo `Engineering Team`, CI e verificações obrigatórias precisam existir e estar verdes.
 
 ## 5. Revisão
 
 - Solicitar reviewers compatíveis com o risco e CODEOWNERS.
+- Declarar se a revisão é self-review, segunda passagem, assistida ou humana independente.
 - Responder questions com evidência.
 - Corrigir findings blocking.
 - Não resolver thread sem tratar o conteúdo ou obter concordância.
+- Não representar revisão de agente como aprovação humana.
 
 ## 6. Aprovação
 
-Exigir:
+Exigir em qualquer modo:
 
-- CI verde;
 - zero findings P0/P1 abertos;
+- zero findings `blocking` abertos;
 - critérios de aceite demonstrados;
 - documentação atualizada;
-- uma aprovação humana para risco baixo ou médio;
-- duas aprovações humanas para Constituição, segurança, dados destrutivos ou risco crítico.
+- riscos, limitações e rollback registrados quando aplicáveis;
+- todo check configurado aprovado.
+
+### Matriz por modo
+
+| Gate | Single Maintainer | Engineering Team |
+|---|---|---|
+| Pull Request | obrigatória | obrigatória |
+| Self-review integral | obrigatório | obrigatório |
+| Revisão humana | usar reviewer elegível quando disponível; ausência declarada quando não houver | pelo menos uma aprovação independente para risco baixo ou médio |
+| Constituição, segurança, dados destrutivos ou risco crítico | decisão humana explícita, ADR quando aplicável, segunda passagem, riscos e rollback | duas aprovações humanas independentes |
+| CI configurado | obrigatório e verde | obrigatório e verde |
+| Check inexistente | validação local reproduzível e limitação declarada | não satisfaz o gate |
+| Merge pelo autor | permitido sem representar autoaprovação | sujeito às aprovações independentes aplicáveis |
+
+No modo `Single Maintainer`, self-review ou revisão assistida não se torna independente por ser executada em outra sessão. O mantenedor registra a limitação e decide o merge sob sua autoridade explícita.
 
 ## 7. Merge
 
 - Preferir squash merge.
 - Usar título compatível com Conventional Commits.
-- Não autoaprovar.
+- Não representar decisão do autor como aprovação independente.
+- Aplicar os gates do modo ativo antes do merge.
 - Confirmar rollback e verificação pós-merge quando aplicáveis.

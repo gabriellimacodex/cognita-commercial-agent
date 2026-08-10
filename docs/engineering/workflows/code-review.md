@@ -5,8 +5,18 @@
 - Ler objetivo, não objetivos, plano e ADRs.
 - Confirmar base e escopo do diff.
 - Identificar classe de risco.
+- Identificar o modo de governança e o tipo de revisão realizado.
 
-## 2. Revisar por prioridade
+## 2. Classificar a revisão
+
+- **Self-review:** autor revisa a própria mudança.
+- **Segunda passagem:** autor repete a revisão depois que o conjunto está estável; reduz viés, mas não cria independência.
+- **Revisão assistida:** agente ou automação analisa a mudança e produz evidência; não equivale a aprovação humana.
+- **Revisão humana independente:** pessoa elegível distinta do autor avalia a mudança.
+
+No modo `Single Maintainer`, declarar a ausência de independência quando não houver reviewer humano elegível. No modo `Engineering Team`, aplicar as aprovações independentes do workflow de Pull Request.
+
+## 3. Revisar por prioridade
 
 1. escopo e intenção;
 2. correção funcional;
@@ -18,7 +28,7 @@
 8. documentação;
 9. legibilidade não automatizável.
 
-## 3. Registrar findings
+## 4. Registrar findings
 
 Cada finding deve conter:
 
@@ -31,14 +41,17 @@ Cada finding deve conter:
 
 Não tratar preferência pessoal como defeito. Não duplicar feedback coberto por linter ou formatador.
 
-## 4. Verificar correções
+## 5. Verificar correções
 
 - Reavaliar o comportamento afetado, não apenas a linha editada.
 - Exigir teste de regressão para defeito reproduzível.
 - Manter thread aberta enquanto o risco persistir.
 
-## 5. Decidir
+## 6. Decidir
 
-- Aprovar somente com evidência suficiente e gates atendidos.
+- Separar o veredito técnico sobre o conteúdo da prontidão para merge.
+- Aprovar tecnicamente somente com evidência suficiente e sem finding bloqueante.
+- Declarar gates humanos ou automatizados ainda pendentes.
 - Solicitar mudanças quando houver finding blocking.
 - Declarar limitações da revisão quando parte do sistema não pôde ser verificada.
+- Não classificar revisão assistida como aprovação humana.

@@ -25,8 +25,9 @@ chore/<description>
 ## Merge
 
 - Preferir squash merge.
-- Exigir CI verde e aprovações aplicáveis.
-- Não permitir autoaprovação.
+- Exigir checks e aprovações definidos pelo modo de governança ativo.
+- Permitir merge pelo autor somente quando o workflow oficial o autorizar.
+- Não representar merge pelo autor como autoaprovação ou revisão independente.
 - Excluir branch após merge quando não houver razão para preservá-la.
 
 Regras de proteção efetivas são configuradas no GitHub e devem refletir o workflow oficial de Pull Request.
