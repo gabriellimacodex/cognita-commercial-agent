@@ -340,6 +340,35 @@ export function checkCefStructure(root) {
   const workflowFiles = walkFiles(workflowRoot).filter((file) => file.endsWith(".yaml") || file.endsWith(".yml"));
   checkActionReferences(root, workflowFiles, errors);
 
+  const governanceWorkflow = path.join(workflowRoot, "cef-governance.yml");
+  if (!existsSync(governanceWorkflow)) {
+    errors.push(".github/workflows/cef-governance.yml: required workflow is missing");
+  } else {
+    const content = readFileSync(governanceWorkflow, "utf8");
+    const parsed = parseYaml(content);
+    if (JSON.stringify(parsed?.permissions) !== JSON.stringify({ contents: "read" })) {
+      errors.push(".github/workflows/cef-governance.yml: permissions must be exactly contents: read");
+    }
+    if (parsed?.jobs?.governance?.name !== "CEF Governance") {
+      errors.push(".github/workflows/cef-governance.yml: stable job name must be CEF Governance");
+    }
+    if (parsed?.jobs?.governance?.["runs-on"] !== "ubuntu-24.04") {
+      errors.push(".github/workflows/cef-governance.yml: governance job must use ubuntu-24.04");
+    }
+    if (content.includes("${{ secrets.")) {
+      errors.push(".github/workflows/cef-governance.yml: basic governance workflow must not use secrets");
+    }
+    if (/runs-on:\s*.*self-hosted/.test(content)) {
+      errors.push(".github/workflows/cef-governance.yml: self-hosted runner is prohibited");
+    }
+    if (!content.includes("persist-credentials: false")) {
+      errors.push(".github/workflows/cef-governance.yml: checkout credentials must not persist");
+    }
+    if (!content.includes("run: npm run check")) {
+      errors.push(".github/workflows/cef-governance.yml: workflow must execute the canonical local command");
+    }
+  }
+
   return finish("cef-structure", errors);
 }
 
