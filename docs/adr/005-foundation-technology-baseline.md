@@ -4,7 +4,7 @@
 - **Data:** 2026-08-10
 - **Responsável:** Cognita
 - **Substitui:** nenhuma
-- **Substituída por:** nenhuma
+- **Substituída por:** ADR 007 (substituição parcial limitada à versão do ESLint)
 
 ## Contexto
 

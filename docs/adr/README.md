@@ -42,3 +42,4 @@ Uma ADR `Accepted` não deve ser alterada materialmente. Criar nova ADR para sub
 | [004](004-repository-governance-bootstrap.md) | Adotar o Repository Governance Bootstrap | Accepted |
 | [005](005-foundation-technology-baseline.md) | Adotar a baseline tecnológica da fundação | Accepted |
 | [006](006-durable-foundation-job-delivery.md) | Adotar entrega durável para jobs da fundação | Accepted |
+| [007](007-eslint-compatibility-baseline-nextjs-16.md) | ESLint Compatibility Baseline for Next.js 16 | Accepted |
