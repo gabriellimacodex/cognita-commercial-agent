@@ -1,0 +1,33 @@
+{
+  "name": "@cognita/repository-governance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.19.0",
+    "npm": "11.17.0"
+  },
+  "packageManager": "npm@11.17.0",
+  "scripts": {
+    "check": "node src/run-all.mjs",
+    "check:markdown": "cd ../.. && tools/governance/node_modules/.bin/markdownlint-cli2 --config .markdownlint-cli2.jsonc \"**/*.md\" \"#tools/governance/node_modules/**\" \"#tools/governance/.cache/**\"",
+    "check:links": "node src/validate.mjs links",
+    "check:skills": "node src/validate.mjs skills",
+    "check:skill-metadata": "node src/validate.mjs skill-metadata",
+    "check:diff": "node src/validate.mjs diff",
+    "check:placeholders": "node src/validate.mjs placeholders",
+    "check:secrets": "cd ../.. && tools/governance/node_modules/.bin/secretlint --secretlintrc .secretlintrc.json \"**/*\"",
+    "check:cef-structure": "node src/validate.mjs cef-structure",
+    "check:records": "node src/validate.mjs records",
+    "test": "node --test",
+    "verify:github": "node src/verify-repository-settings.mjs"
+  },
+  "devDependencies": {
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.4",
+    "github-slugger": "2.0.0",
+    "markdown-it": "14.3.0",
+    "markdownlint-cli2": "0.23.2",
+    "secretlint": "13.0.4",
+    "yaml": "2.9.0"
+  }
+}

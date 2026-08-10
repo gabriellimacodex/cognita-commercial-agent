@@ -21,11 +21,15 @@ Preencher `.github/PULL_REQUEST_TEMPLATE.md` sem remover seções obrigatórias.
 
 ## 4. CI
 
+- Aguardar o check obrigatório e estável `CEF Governance` quando configurado.
+- Reproduzir localmente esse check pelos comandos canônicos de `tools/governance` antes do push.
 - Aguardar todo check configurado e obrigatório.
 - Investigar falhas; não repetir jobs até mascarar flakiness.
 - Nunca substituir manualmente um check existente.
 - No modo `Single Maintainer`, quando um check ainda não existir, registrar validação local reproduzível com comando, resultado e limitação.
 - No modo `Engineering Team`, CI e verificações obrigatórias precisam existir e estar verdes.
+
+`CEF Governance` é o contrato externo do Ruleset. Os validadores internos e seus nomes não são gates independentes de merge.
 
 ## 5. Revisão
 

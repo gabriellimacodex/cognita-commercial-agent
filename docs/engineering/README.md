@@ -17,6 +17,7 @@ Este diretório contém a governança oficial de engenharia da Cognita. Cada con
 | Estrutura de documentos | [Templates](templates) |
 | Decisões arquiteturais | [ADRs](../adr/README.md) |
 | Investigações arquiteturais | [RFCs](../rfcs/README.md) |
+| Automação objetiva da governança | [Repository Governance Tooling](../../tools/governance/README.md) |
 
 ## Como selecionar documentos
 
@@ -29,6 +30,7 @@ Este diretório contém a governança oficial de engenharia da Cognita. Cada con
 - Para revisão, seguir `workflows/code-review.md` e os checklists de self-review e reviewer.
 - Para PR, seguir `workflows/pull-request.md` e `.github/PULL_REQUEST_TEMPLATE.md`.
 - Para operar com um único mantenedor, seguir `workflows/governance-bootstrap.md` e a ADR que define o modo ativo.
+- Para reproduzir o check obrigatório, executar os comandos documentados em `../../tools/governance/README.md`.
 - Para consultar exploração arquitetural não autorizadora, usar `../rfcs/README.md`.
 
 ## Política de fonte única
