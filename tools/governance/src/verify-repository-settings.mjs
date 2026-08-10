@@ -16,7 +16,8 @@ function ghJson(endpoint) {
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).filter(([key]) => !["_links", "created_at", "id", "node_id", "source", "source_type", "updated_at"].includes(key)).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)]));
+    const computed = ["_links", "created_at", "current_user_can_bypass", "id", "node_id", "source", "source_type", "updated_at"];
+    return Object.fromEntries(Object.entries(value).filter(([key]) => !computed.includes(key)).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)]));
   }
   return value;
 }
