@@ -1,0 +1,43 @@
+{
+  "name": "cognita-commercial-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": "24.19.0",
+    "pnpm": "11.21.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "dev": "pnpm --parallel --filter @cognita/api --filter @cognita/worker --filter @cognita/cockpit dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "pnpm -r --if-present typecheck && tsc -p tsconfig.json",
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "db:migrate": "pnpm --filter @cognita/database migrate:up",
+    "db:migrate:down": "pnpm --filter @cognita/database migrate:down",
+    "foundation:check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && pnpm test:unit"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.62.1",
+    "@types/node": "24.13.3",
+    "bullmq": "6.0.10",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.9.0",
+    "ioredis": "6.0.0",
+    "kysely": "0.29.5",
+    "prettier": "3.9.6",
+    "tsx": "4.23.12",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.66.0",
+    "vitest": "4.1.10"
+  }
+}

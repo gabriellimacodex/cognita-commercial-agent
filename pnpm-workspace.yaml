@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: false
+  sharp: true
+  unrs-resolver: false
+
+minimumReleaseAgeExclude:
+  - bullmq@6.0.10
+  - kysely@0.29.5
+  - tsx@4.23.12

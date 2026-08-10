@@ -1,9 +1,14 @@
 node_modules
+.cache
+.pnpm-store
 .next
 dist
 coverage
+playwright-report
+test-results
 .env
 .env.*
 !.env.example
 .DS_Store
 *.log
+*.tsbuildinfo

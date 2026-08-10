@@ -1,0 +1,12 @@
+.cache
+.git
+.github
+**/.next
+.pnpm-store
+coverage
+**/dist
+**/node_modules
+tools/governance/node_modules
+**/*.tsbuildinfo
+**/.env
+**/*.log

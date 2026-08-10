@@ -1,5 +1,8 @@
-# n8n
+# n8n no Épico 01
 
-Os workflows serão exportados em JSON e documentados individualmente.
+O n8n existe somente como serviço isolado de fundação. Ele usa SQLite em volume
+próprio, expõe readiness local e não recebe credenciais de PostgreSQL ou Redis
+da aplicação.
 
-Nenhum workflow pode conter regra comercial crítica.
+Nenhum workflow ou integração é implementado no Épico 01. Reiniciar o serviço
+deve preservar seu estado técnico no volume `n8n_data`.
