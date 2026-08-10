@@ -40,3 +40,5 @@ Uma ADR `Accepted` não deve ser alterada materialmente. Criar nova ADR para sub
 | [002](002-repository-local-codex-skills.md) | Versionar Skills CEF no repositório | Accepted |
 | [003](003-single-maintainer-governance.md) | Operar a governança com um único mantenedor | Accepted |
 | [004](004-repository-governance-bootstrap.md) | Adotar o Repository Governance Bootstrap | Accepted |
+| [005](005-foundation-technology-baseline.md) | Adotar a baseline tecnológica da fundação | Accepted |
+| [006](006-durable-foundation-job-delivery.md) | Adotar entrega durável para jobs da fundação | Accepted |
