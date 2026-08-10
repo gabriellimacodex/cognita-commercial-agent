@@ -10,7 +10,7 @@
   "packageManager": "npm@11.17.0",
   "scripts": {
     "check": "node src/run-all.mjs",
-    "check:markdown": "cd ../.. && tools/governance/node_modules/.bin/markdownlint-cli2 --config .markdownlint-cli2.jsonc \"**/*.md\" \"#tools/governance/node_modules/**\" \"#tools/governance/.cache/**\"",
+    "check:markdown": "cd ../.. && tools/governance/node_modules/.bin/markdownlint-cli2 --config .markdownlint-cli2.jsonc \"**/*.md\" \"#**/node_modules/**\" \"#**/.cache/**\" \"#**/.next/**\" \"#**/coverage/**\" \"#**/dist/**\"",
     "check:links": "node src/validate.mjs links",
     "check:skills": "node src/validate.mjs skills",
     "check:skill-metadata": "node src/validate.mjs skill-metadata",
