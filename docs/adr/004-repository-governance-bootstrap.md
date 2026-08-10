@@ -143,7 +143,7 @@ completo. Nenhum token operacional será versionado.
 O tooling será isolado em `tools/governance`, com manifesto e lockfile próprios,
 sem determinar o gerenciador de pacotes do futuro produto.
 
-A versão inicial proposta é:
+A versão inicial adotada é:
 
 - Node.js `24.19.0` LTS;
 - npm `11.17.0`;
@@ -289,9 +289,9 @@ finding P0, P1 ou `blocking`.
 
 ## Relação com a ADR 003
 
-Esta proposta complementa a ADR 003 e não a substitui. A ADR 003 define o modo
+Esta decisão complementa a ADR 003 e não a substitui. A ADR 003 define o modo
 `Single Maintainer`, a autoridade humana e a regra de que checks configurados
-precisam passar. A ADR 004 propõe a infraestrutura que materializa parte desses
+precisam passar. A ADR 004 estabelece a infraestrutura que materializa parte desses
 gates.
 
 A disponibilidade de CI e Ruleset remove lacunas de automação, mas não cria
