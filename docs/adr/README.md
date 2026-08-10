@@ -43,3 +43,5 @@ Uma ADR `Accepted` não deve ser alterada materialmente. Criar nova ADR para sub
 | [005](005-foundation-technology-baseline.md) | Adotar a baseline tecnológica da fundação | Accepted |
 | [006](006-durable-foundation-job-delivery.md) | Adotar entrega durável para jobs da fundação | Accepted |
 | [007](007-eslint-compatibility-baseline-nextjs-16.md) | ESLint Compatibility Baseline for Next.js 16 | Accepted |
+| [008](008-commercial-domain-model-and-lifecycle.md) | Adotar o modelo e o ciclo de vida do domínio comercial | Accepted |
+| [009](009-commercial-audit-idempotency-and-external-identity.md) | Adotar auditoria, idempotência e identidade externa comercial | Accepted |
