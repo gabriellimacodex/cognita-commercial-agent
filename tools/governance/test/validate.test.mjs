@@ -111,6 +111,20 @@ test("prohibited placeholder marker fails", () => {
   assert.match(result.stderr, /prohibited placeholder marker/);
 });
 
+test("generated product directories are excluded from structural scans", () => {
+  const root = temporaryDirectory();
+  const marker = ["TO", "DO"].join("");
+  for (const directory of [".cache", ".next", "coverage", "dist", "node_modules"]) {
+    const target = path.join(root, directory);
+    mkdirSync(target, { recursive: true });
+    writeFileSync(path.join(target, "generated.js"), `${marker}: generated artifact\n`);
+  }
+
+  const result = run("placeholders", root);
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("git whitespace violation fails", () => {
   const root = temporaryDirectory();
   const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" });

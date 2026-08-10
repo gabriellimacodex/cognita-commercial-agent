@@ -1,0 +1,10 @@
+.next
+.github/PULL_REQUEST_TEMPLATE.md
+.github/rulesets
+.markdownlint-cli2.jsonc
+coverage
+dist
+docs
+node_modules
+pnpm-lock.yaml
+tools/governance

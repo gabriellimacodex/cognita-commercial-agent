@@ -47,7 +47,14 @@ const expectedSkills = {
   ],
 };
 
-const ignoredDirectories = new Set([".git", ".cache", "coverage", "dist", "node_modules"]);
+const ignoredDirectories = new Set([
+  ".git",
+  ".cache",
+  ".next",
+  "coverage",
+  "dist",
+  "node_modules",
+]);
 
 function parseArguments(argv) {
   const command = argv[2];

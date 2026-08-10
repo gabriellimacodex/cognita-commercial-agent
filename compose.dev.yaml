@@ -1,0 +1,15 @@
+services:
+  postgres:
+    networks: [foundation, development]
+    ports:
+      - "127.0.0.1:5433:5432"
+
+  redis:
+    command:
+      ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    networks: [foundation, development]
+    ports:
+      - "127.0.0.1:6380:6379"
+
+networks:
+  development:

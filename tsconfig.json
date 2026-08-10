@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "declaration": false,
+    "noEmit": true,
+    "paths": {
+      "@cognita/database": ["./packages/database/src/index.ts"],
+      "@cognita/observability": ["./packages/observability/src/index.ts"],
+      "@cognita/schemas": ["./packages/schemas/src/index.ts"]
+    }
+  },
+  "include": ["tests/**/*.ts", "vitest.*.config.ts", "playwright.config.ts"]
+}

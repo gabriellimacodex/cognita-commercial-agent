@@ -1,0 +1,144 @@
+name: Foundation CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    name: Foundation CI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      POSTGRES_DB: cognita_foundation
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PASSWORD: local_only_not_a_secret
+      POSTGRES_PORT: 5433
+      POSTGRES_USER: cognita_foundation
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6380
+      TMPDIR: ${{ github.workspace }}/.cache/tmp
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up exact Node.js runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+
+      - name: Set up exact Docker Compose
+        uses: docker/setup-compose-action@364cc21a5de5b1ee4a7f5f9d3fa374ce0ccde746 # v1.2.0
+        with:
+          version: v5.1.0
+
+      - name: Install and verify exact product toolchain
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.21.0 --activate
+          test "$(node --version)" = "v24.19.0"
+          test "$(pnpm --version)" = "11.21.0"
+          test "$(docker compose version --short)" = "5.1.0"
+          mkdir -p "$TMPDIR"
+          printf 'DATABASE_URL=postgresql://%s:%s@%s:%s/%s\n' \
+            "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_HOST" "$POSTGRES_PORT" "$POSTGRES_DB" \
+            >> "$GITHUB_ENV"
+          printf 'REDIS_URL=redis://%s:%s\n' "$REDIS_HOST" "$REDIS_PORT" >> "$GITHUB_ENV"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate dependency peers
+        run: pnpm peers check
+
+      - name: Validate formatting, lint and types
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+
+      - name: Build applications and packages
+        run: pnpm build
+
+      - name: Run unit tests
+        run: pnpm test:unit
+
+      - name: Validate Compose models
+        run: |
+          docker compose -f compose.yaml config --quiet
+          docker compose -f compose.yaml -f compose.dev.yaml config --quiet
+
+      - name: Start PostgreSQL and Redis for integration
+        run: docker compose -f compose.yaml -f compose.dev.yaml up -d --wait postgres redis
+
+      - name: Validate reversible migrations
+        shell: bash
+        run: |
+          pnpm db:migrate
+          pnpm db:migrate:down
+          docker compose -f compose.yaml -f compose.dev.yaml exec -T postgres \
+            psql -U cognita_foundation -d cognita_foundation -Atc \
+            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('organizations','foundation_jobs');" \
+            | grep --fixed-strings --line-regexp "0"
+          pnpm db:migrate
+
+      - name: Run integration and failure tests
+        run: pnpm test:integration
+
+      - name: Build and start the complete foundation
+        run: docker compose -f compose.yaml up -d --build --wait
+
+      - name: Install Chromium runtime
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run cockpit end-to-end test
+        run: pnpm test:e2e
+
+      - name: Validate container privilege and n8n isolation
+        shell: bash
+        run: |
+          for service in api worker cockpit; do
+            test "$(docker compose -f compose.yaml exec -T "$service" id -u)" = "1000"
+          done
+          docker compose -f compose.yaml exec -T n8n node -e \
+            "fetch('http://api:3001/health',{signal:AbortSignal.timeout(1000)}).then(()=>process.exit(1)).catch(()=>process.exit(0))"
+          docker compose -f compose.yaml exec -T n8n node -e \
+            "const keys=Object.keys(process.env); if(keys.includes('DATABASE_URL')||keys.includes('REDIS_URL')) process.exit(1)"
+
+      - name: Validate n8n readiness and volume persistence
+        shell: bash
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:5678/healthz/readiness >/dev/null
+          docker compose -f compose.yaml exec -T n8n sh -c 'printf foundation-persistence > /home/node/.n8n/foundation-persistence-check'
+          docker compose -f compose.yaml restart n8n
+          docker compose -f compose.yaml up -d --wait n8n
+          docker compose -f compose.yaml exec -T n8n sh -c 'test "$(cat /home/node/.n8n/foundation-persistence-check)" = foundation-persistence'
+
+      - name: Validate graceful worker shutdown and restart
+        shell: bash
+        run: |
+          worker_id="$(docker compose -f compose.yaml ps -q worker)"
+          docker compose -f compose.yaml stop worker
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$worker_id")" = "0"
+          docker compose -f compose.yaml up -d --wait worker
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose -f compose.yaml -f compose.dev.yaml logs --no-color
+
+      - name: Remove ephemeral test environment
+        if: always()
+        run: docker compose -f compose.yaml -f compose.dev.yaml down --volumes --remove-orphans
