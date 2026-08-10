@@ -1,7 +1,7 @@
 {
   "name": "main-protection-single-maintainer",
   "target": "branch",
-  "enforcement": "disabled",
+  "enforcement": "active",
   "bypass_actors": [
     {
       "actor_id": 5,
