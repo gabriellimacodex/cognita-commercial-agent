@@ -1,0 +1,31 @@
+import type { FastifyInstance } from "fastify";
+
+import type { CommercialHandler } from "./commercial-handler.js";
+
+export function registerCommercialRoutes(
+  api: FastifyInstance,
+  handler: CommercialHandler,
+): void {
+  api.post("/commercial/organizations", handler.createOrganization);
+  api.get("/commercial/organizations/:id", handler.getOrganization);
+  api.post("/commercial/companies", handler.createCompany);
+  api.get("/commercial/companies/:id", handler.getCompany);
+  api.post("/commercial/contacts", handler.createContact);
+  api.get("/commercial/contacts/:id", handler.getContact);
+  api.put("/commercial/contacts/:id/company", handler.linkContactCompany);
+  api.post("/commercial/leads", handler.createLead);
+  api.get("/commercial/leads/:id", handler.getLead);
+  api.put("/commercial/leads/:id/company", handler.linkLeadCompany);
+  api.post("/commercial/leads/:id/assignments", handler.assignLead);
+  api.get("/commercial/leads/:id/context", handler.getLeadContext);
+  api.get("/commercial/leads/:id/timeline", handler.getLeadTimeline);
+  api.post("/commercial/conversations", handler.createConversation);
+  api.get("/commercial/conversations/:id", handler.getConversation);
+  api.post("/commercial/conversations/:id/messages", handler.createMessage);
+  api.post("/commercial/opportunities", handler.createOpportunity);
+  api.get("/commercial/opportunities/:id", handler.getOpportunity);
+  api.post(
+    "/commercial/opportunities/:id/transitions",
+    handler.transitionOpportunity,
+  );
+}

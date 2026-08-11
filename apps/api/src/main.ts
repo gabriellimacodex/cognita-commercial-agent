@@ -4,12 +4,14 @@ import { Redis } from "ioredis";
 
 import {
   checkDatabase,
+  CommercialRepository,
   createDatabase,
   FoundationJobRepository,
 } from "@cognita/database";
 import { createLogger } from "@cognita/observability";
 
 import { FoundationJobService } from "./application/foundation-job-service.js";
+import { CommercialService } from "./commercial/commercial-service.js";
 import { readApiConfig } from "./config.js";
 import { BullMqFoundationQueue } from "./infrastructure/bullmq-queue.js";
 import { BullMqFoundationJobPublisher } from "./infrastructure/foundation-job-publisher.js";
@@ -30,13 +32,16 @@ const redis = new Redis(config.REDIS_URL, {
 });
 const queue = new BullMqFoundationQueue({ connection: redis });
 const repository = new FoundationJobRepository(database);
+const commercialRepository = new CommercialRepository(database);
 const publisher = new BullMqFoundationJobPublisher(queue, repository, logger, {
   retryAfterMs: config.JOB_PUBLISH_RETRY_MS,
   staleAfterMs: config.JOB_STALE_AFTER_MS,
 });
 const service = new FoundationJobService(repository, publisher);
+const commercialService = new CommercialService(commercialRepository, logger);
 const api = await buildApi({
   service,
+  commercialService,
   checkDatabase: async () => checkDatabase(database),
   checkRedis: async () => {
     await redis.ping();
