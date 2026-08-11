@@ -61,6 +61,14 @@ const api = await buildApi({
   checkRedis: async () => undefined,
   logger,
 });
+let injectedClientSequence = 0;
+
+function nextInjectedClientAddress(): string {
+  injectedClientSequence += 1;
+  const thirdOctet = Math.floor(injectedClientSequence / 254);
+  const fourthOctet = (injectedClientSequence % 254) + 1;
+  return `10.0.${thirdOctet}.${fourthOctet}`;
+}
 
 async function commercialCommand(
   method: "POST" | "PUT",
@@ -71,6 +79,7 @@ async function commercialCommand(
   return api.inject({
     method,
     url: path,
+    remoteAddress: nextInjectedClientAddress(),
     headers: { "idempotency-key": idempotencyKey },
     payload,
   });
