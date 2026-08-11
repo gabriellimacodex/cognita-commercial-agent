@@ -10,6 +10,16 @@ describe("migrationProvider", () => {
       "001_create_organizations",
       "002_create_foundation_jobs",
       "003_add_foundation_job_recovery_indexes",
+      "004_create_commercial_commands",
+      "005_create_companies",
+      "006_create_contacts",
+      "007_create_leads",
+      "008_create_opportunities",
+      "009_create_conversations",
+      "010_create_messages",
+      "011_create_lead_assignments",
+      "012_create_commercial_events",
+      "013_add_commercial_integrity_indexes_and_immutability",
     ]);
   });
 });
