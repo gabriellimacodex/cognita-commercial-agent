@@ -184,7 +184,7 @@ export interface CommercialFactsTable {
   factKey: CommercialFactKey;
   factSchemaVersion: number;
   valueType: "boolean" | "integer" | "string" | "timestamp";
-  value: ColumnType<unknown, unknown, never>;
+  value: ColumnType<unknown, string, never>;
   sourceType: "human_declaration" | "domain_record";
   sourceRef: string;
   declarerRef: string;
@@ -219,31 +219,24 @@ export interface CommercialDecisionsTable {
   policyDigest: string;
   decisionSchemaVersion: number;
   inputFingerprint: string;
-  inputSnapshot: JSONColumnType<
-    Record<string, unknown>,
-    Record<string, unknown>,
-    never
-  >;
+  inputSnapshot: JSONColumnType<Record<string, unknown>, string, never>;
   outcome: CommercialDecisionOutcome;
   eligibleActions: JSONColumnType<
     Array<{
       action: CommercialRequestedAction;
       authorityType: "policy" | "declared_human";
     }>,
-    Array<{
-      action: CommercialRequestedAction;
-      authorityType: "policy" | "declared_human";
-    }>,
+    string,
     never
   >;
   blockedActions: JSONColumnType<
     Array<{ action: CommercialRequestedAction; reasonCodes: string[] }>,
-    Array<{ action: CommercialRequestedAction; reasonCodes: string[] }>,
+    string,
     never
   >;
-  missingRequirements: JSONColumnType<string[], string[], never>;
-  requiredEvidence: JSONColumnType<string[], string[], never>;
-  reasonCodes: JSONColumnType<string[], string[], never>;
+  missingRequirements: JSONColumnType<string[], string, never>;
+  requiredEvidence: JSONColumnType<string[], string, never>;
+  reasonCodes: JSONColumnType<string[], string, never>;
   escalationRequired: boolean;
   humanReasonCode: CommercialHumanReasonCode | null;
   humanEvidenceType:

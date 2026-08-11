@@ -433,6 +433,75 @@ describe("commercial domain foundation", () => {
     );
   });
 
+  it("round-trips commercial JSONB values without double encoding", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+
+    await recordFact(
+      organizationId,
+      lead.targetId!,
+      "company_ownership_type",
+      "private",
+    );
+    await recordFact(organizationId, lead.targetId!, "uses_crm", false);
+    await recordFact(organizationId, lead.targetId!, "seller_count", 3);
+    const decision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+    );
+
+    const factRows = await database
+      .selectFrom("commercialFacts")
+      .select(["factKey", "value"])
+      .where("organizationId", "=", organizationId)
+      .where("leadId", "=", lead.targetId!)
+      .execute();
+    const factValues = Object.fromEntries(
+      factRows.map((row) => [row.factKey, row.value]),
+    );
+    const decisionRow = await database
+      .selectFrom("commercialDecisions")
+      .select([
+        "inputSnapshot",
+        "eligibleActions",
+        "blockedActions",
+        "missingRequirements",
+        "requiredEvidence",
+        "reasonCodes",
+      ])
+      .where("organizationId", "=", organizationId)
+      .where("id", "=", decision.id)
+      .executeTakeFirstOrThrow();
+
+    expect(factValues).toEqual({
+      company_ownership_type: "private",
+      uses_crm: false,
+      seller_count: 3,
+    });
+    expect(decisionRow.inputSnapshot).toEqual(
+      expect.objectContaining({ requestedAction: "create_opportunity" }),
+    );
+    expect(decisionRow.eligibleActions).toEqual([]);
+    expect(decisionRow.blockedActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "create_opportunity" }),
+      ]),
+    );
+    expect(decisionRow.missingRequirements).toEqual(
+      expect.arrayContaining(["has_existing_sales_process"]),
+    );
+    expect(decisionRow.requiredEvidence).toEqual([]);
+    expect(decisionRow.reasonCodes).toEqual(
+      expect.arrayContaining(["fact_unknown"]),
+    );
+    expect(typeof factValues.company_ownership_type).toBe("string");
+    expect(Array.isArray(decisionRow.blockedActions)).toBe(true);
+    expect(Array.isArray(decisionRow.missingRequirements)).toBe(true);
+    expect(typeof decisionRow.inputSnapshot).toBe("object");
+  });
+
   it("treats CNPJ as strong identity without merging ambiguous Company fields", async () => {
     const organizationId = await createOrganization();
     const first = await successfulCommand("POST", "/commercial/companies", {

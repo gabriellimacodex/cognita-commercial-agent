@@ -20,6 +20,7 @@ import {
   serializeOpportunity,
 } from "./commercial-repository.js";
 import { buildCommercialFactSnapshots } from "./commercial-fact-snapshot.js";
+import { serializeJsonb } from "./jsonb.js";
 import type {
   CommercialDecisionRow,
   CommercialFactRow,
@@ -203,7 +204,7 @@ export class CommercialDecisionRepository {
           factKey: record.factKey,
           factSchemaVersion: record.factSchemaVersion,
           valueType: record.valueType,
-          value: record.value,
+          value: serializeJsonb(record.value),
           sourceType: record.sourceType,
           sourceRef: record.sourceRef,
           declarerRef: record.declarerRef,
@@ -318,13 +319,13 @@ export class CommercialDecisionRepository {
           policyDigest: evaluation.policyDigest,
           decisionSchemaVersion: evaluation.decisionSchemaVersion,
           inputFingerprint: evaluation.inputFingerprint,
-          inputSnapshot: evaluation.inputSnapshot,
+          inputSnapshot: serializeJsonb(evaluation.inputSnapshot),
           outcome: evaluation.outcome,
-          eligibleActions: evaluation.eligibleActions,
-          blockedActions: evaluation.blockedActions,
-          missingRequirements: evaluation.missingRequirements,
-          requiredEvidence: evaluation.requiredEvidence,
-          reasonCodes: evaluation.reasonCodes,
+          eligibleActions: serializeJsonb(evaluation.eligibleActions),
+          blockedActions: serializeJsonb(evaluation.blockedActions),
+          missingRequirements: serializeJsonb(evaluation.missingRequirements),
+          requiredEvidence: serializeJsonb(evaluation.requiredEvidence),
+          reasonCodes: serializeJsonb(evaluation.reasonCodes),
           escalationRequired: evaluation.escalationRequired,
           humanReasonCode: input.reasonCode ?? null,
           humanEvidenceType: input.evidence?.type ?? null,
