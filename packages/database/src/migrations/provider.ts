@@ -13,6 +13,10 @@ import * as createMessages from "./010-create-messages.js";
 import * as createLeadAssignments from "./011-create-lead-assignments.js";
 import * as createCommercialEvents from "./012-create-commercial-events.js";
 import * as addCommercialIntegrity from "./013-add-commercial-integrity-indexes-and-immutability.js";
+import * as createCommercialFacts from "./014-create-commercial-facts.js";
+import * as createCommercialDecisions from "./015-create-commercial-decisions.js";
+import * as createCommercialDecisionFacts from "./016-create-commercial-decision-facts.js";
+import * as addCommercialDecisionIntegrity from "./017-add-commercial-decision-audit-and-integrity.js";
 
 export const migrationProvider: MigrationProvider = {
   getMigrations(): Promise<Record<string, Migration>> {
@@ -32,6 +36,11 @@ export const migrationProvider: MigrationProvider = {
       "012_create_commercial_events": createCommercialEvents,
       "013_add_commercial_integrity_indexes_and_immutability":
         addCommercialIntegrity,
+      "014_create_commercial_facts": createCommercialFacts,
+      "015_create_commercial_decisions": createCommercialDecisions,
+      "016_create_commercial_decision_facts": createCommercialDecisionFacts,
+      "017_add_commercial_decision_audit_and_integrity":
+        addCommercialDecisionIntegrity,
     });
   },
 };

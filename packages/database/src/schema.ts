@@ -1,4 +1,8 @@
 import type {
+  CommercialDecisionOutcome,
+  CommercialFactKey,
+  CommercialHumanReasonCode,
+  CommercialRequestedAction,
   CommercialEventType,
   FoundationJobInput,
   FoundationJobStatus,
@@ -173,6 +177,99 @@ export interface CommercialEventsTable {
   recordedAt: Timestamp;
 }
 
+export interface CommercialFactsTable {
+  id: string;
+  organizationId: string;
+  leadId: string;
+  factKey: CommercialFactKey;
+  factSchemaVersion: number;
+  valueType: "boolean" | "integer" | "string" | "timestamp";
+  value: ColumnType<unknown, unknown, never>;
+  sourceType: "human_declaration" | "domain_record";
+  sourceRef: string;
+  declarerRef: string;
+  authorityType: "declared_human" | null;
+  authorityRef: string | null;
+  executorRef: string;
+  evidenceType: "message" | "commercial_event" | "human_attestation" | null;
+  evidenceRef: string | null;
+  observedAt: Date;
+  recordedAt: Timestamp;
+}
+
+export interface CommercialFactCorrectionsTable {
+  correctiveFactId: string;
+  correctedFactId: string;
+  organizationId: string;
+  createdAt: Timestamp;
+}
+
+export interface CommercialDecisionsTable {
+  id: string;
+  organizationId: string;
+  leadId: string;
+  opportunityId: string | null;
+  decisionType: string;
+  requestedAction: CommercialRequestedAction;
+  authorityType: "policy" | "declared_human";
+  authorityRef: string;
+  executorRef: string;
+  policyKey: string;
+  policyVersion: string;
+  policyDigest: string;
+  decisionSchemaVersion: number;
+  inputFingerprint: string;
+  inputSnapshot: JSONColumnType<
+    Record<string, unknown>,
+    Record<string, unknown>,
+    never
+  >;
+  outcome: CommercialDecisionOutcome;
+  eligibleActions: JSONColumnType<
+    Array<{
+      action: CommercialRequestedAction;
+      authorityType: "policy" | "declared_human";
+    }>,
+    Array<{
+      action: CommercialRequestedAction;
+      authorityType: "policy" | "declared_human";
+    }>,
+    never
+  >;
+  blockedActions: JSONColumnType<
+    Array<{ action: CommercialRequestedAction; reasonCodes: string[] }>,
+    Array<{ action: CommercialRequestedAction; reasonCodes: string[] }>,
+    never
+  >;
+  missingRequirements: JSONColumnType<string[], string[], never>;
+  requiredEvidence: JSONColumnType<string[], string[], never>;
+  reasonCodes: JSONColumnType<string[], string[], never>;
+  escalationRequired: boolean;
+  humanReasonCode: CommercialHumanReasonCode | null;
+  humanEvidenceType:
+    "message" | "commercial_event" | "human_attestation" | null;
+  humanEvidenceRef: string | null;
+  recordedAt: Timestamp;
+}
+
+export interface CommercialDecisionFactsTable {
+  organizationId: string;
+  decisionId: string;
+  factId: string;
+  factKey: CommercialFactKey;
+  createdAt: Timestamp;
+}
+
+export interface CommercialDecisionApplicationsTable {
+  id: string;
+  organizationId: string;
+  decisionId: string;
+  commandId: string;
+  targetType: string;
+  targetId: string;
+  appliedAt: Timestamp;
+}
+
 export interface DatabaseSchema {
   organizations: OrganizationsTable;
   foundationJobs: FoundationJobsTable;
@@ -185,6 +282,11 @@ export interface DatabaseSchema {
   messages: MessagesTable;
   leadAssignments: LeadAssignmentsTable;
   commercialEvents: CommercialEventsTable;
+  commercialFacts: CommercialFactsTable;
+  commercialFactCorrections: CommercialFactCorrectionsTable;
+  commercialDecisions: CommercialDecisionsTable;
+  commercialDecisionFacts: CommercialDecisionFactsTable;
+  commercialDecisionApplications: CommercialDecisionApplicationsTable;
 }
 
 export type FoundationJobRow = Selectable<FoundationJobsTable>;
@@ -199,3 +301,5 @@ export type ConversationRow = Selectable<ConversationsTable>;
 export type MessageRow = Selectable<MessagesTable>;
 export type LeadAssignmentRow = Selectable<LeadAssignmentsTable>;
 export type CommercialEventRow = Selectable<CommercialEventsTable>;
+export type CommercialFactRow = Selectable<CommercialFactsTable>;
+export type CommercialDecisionRow = Selectable<CommercialDecisionsTable>;
