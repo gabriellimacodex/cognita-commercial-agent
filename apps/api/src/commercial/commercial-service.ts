@@ -363,11 +363,6 @@ export class CommercialService {
     input: TransitionOpportunityInput,
     idempotencyKey: string,
   ): Promise<CommandResult> {
-    const current = await this.getOpportunity(
-      input.organizationId,
-      opportunityId,
-    );
-    assertOpportunityTransition(current.commercialState, input.toState);
     const result = await this.repository.transitionOpportunity(
       command(
         input.organizationId,
@@ -381,21 +376,23 @@ export class CommercialService {
         200,
       ),
       opportunityId,
-      current.commercialState,
       input.toState,
       input.reasonCode,
       input.actorRef,
+      assertOpportunityTransition,
     );
-    this.logger.info(
-      {
-        event: "commercial_state_transitioned",
-        organizationId: input.organizationId,
-        opportunityId,
-        fromState: current.commercialState,
-        toState: input.toState,
-      },
-      "Commercial state transitioned",
-    );
+    if (result.transition != null) {
+      this.logger.info(
+        {
+          event: "commercial_state_transitioned",
+          organizationId: input.organizationId,
+          opportunityId,
+          fromState: result.transition.fromState,
+          toState: result.transition.toState,
+        },
+        "Commercial state transitioned",
+      );
+    }
     return this.report(result);
   }
 

@@ -571,7 +571,8 @@ describe("commercial domain foundation", () => {
     expect(persistedLead.status).toBe("converted");
     expect(secondOpportunity.statusCode).toBe(422);
 
-    await successfulCommand(
+    const transitionKey = randomUUID();
+    const firstTransition = await successfulCommand(
       "POST",
       `/commercial/opportunities/${opportunity.targetId}/transitions`,
       {
@@ -580,6 +581,18 @@ describe("commercial domain foundation", () => {
         reasonCode: "started",
         actorRef: "test-human",
       },
+      transitionKey,
+    );
+    const replayedTransition = await successfulCommand(
+      "POST",
+      `/commercial/opportunities/${opportunity.targetId}/transitions`,
+      {
+        organizationId,
+        toState: "discovery",
+        reasonCode: "started",
+        actorRef: "test-human",
+      },
+      transitionKey,
     );
     const invalid = await commercialCommand(
       "POST",
@@ -613,6 +626,7 @@ describe("commercial domain foundation", () => {
     );
     expect(invalid.statusCode).toBe(422);
     expect(terminalRegression.statusCode).toBe(422);
+    expect(replayedTransition).toEqual(firstTransition);
   });
 
   it("enforces append-only Messages and Commercial Events in PostgreSQL", async () => {

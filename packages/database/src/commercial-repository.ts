@@ -84,6 +84,10 @@ export interface CommercialCommandExecution {
 export interface CommandResult {
   receipt: CommercialCommandReceipt;
   replayed: boolean;
+  transition?: {
+    fromState: OpportunityState;
+    toState: OpportunityState;
+  };
 }
 
 interface MutationReceipt {
@@ -837,13 +841,27 @@ export class CommercialRepository {
   public transitionOpportunity(
     command: CommercialCommandExecution,
     opportunityId: string,
-    fromState: OpportunityState,
     toState: OpportunityState,
     reasonCode: string,
     actorRef: string,
+    validateTransition: (
+      fromState: OpportunityState,
+      toState: OpportunityState,
+    ) => void,
   ): Promise<CommandResult> {
+    let transitionedFrom: OpportunityState | undefined;
     return this.runCommand(command, async (transaction) => {
-      const opportunity = await transaction
+      const current = await transaction
+        .selectFrom("opportunities")
+        .select(["commercialState", "leadId"])
+        .where("organizationId", "=", command.organizationId)
+        .where("id", "=", opportunityId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (current == null) throw new CommercialNotFoundError("Opportunity");
+      validateTransition(current.commercialState, toState);
+      transitionedFrom = current.commercialState;
+      await transaction
         .updateTable("opportunities")
         .set({
           commercialState: toState,
@@ -852,33 +870,26 @@ export class CommercialRepository {
         })
         .where("organizationId", "=", command.organizationId)
         .where("id", "=", opportunityId)
-        .where("commercialState", "=", fromState)
-        .returning(["id", "leadId"])
-        .executeTakeFirst();
-      if (opportunity == null) {
-        const current = await transaction
-          .selectFrom("opportunities")
-          .select("commercialState")
-          .where("organizationId", "=", command.organizationId)
-          .where("id", "=", opportunityId)
-          .executeTakeFirst();
-        if (current == null) throw new CommercialNotFoundError("Opportunity");
-        throw new CommercialConflictError(
-          "OPPORTUNITY_STATE_CHANGED",
-          "Opportunity state changed concurrently; reload before retrying",
-        );
-      }
+        .where("commercialState", "=", current.commercialState)
+        .executeTakeFirstOrThrow();
       const eventId = await this.insertEvent(transaction, {
         organizationId: command.organizationId,
         subjectType: "opportunity",
         subjectId: opportunityId,
-        leadId: opportunity.leadId,
+        leadId: current.leadId,
         eventType: "state_changed",
         actorRef,
-        metadata: { fromState, toState, reasonCode },
+        metadata: { fromState: current.commercialState, toState, reasonCode },
       });
       return { targetId: opportunityId, eventId };
-    });
+    }).then((result) =>
+      transitionedFrom == null || result.replayed
+        ? result
+        : {
+            ...result,
+            transition: { fromState: transitionedFrom, toState },
+          },
+    );
   }
 
   public async findOrganization(id: string): Promise<Organization | undefined> {
