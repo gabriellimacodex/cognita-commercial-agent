@@ -79,13 +79,43 @@ form {
   gap: 10px;
 }
 
-textarea {
+textarea,
+input {
   width: 100%;
   resize: vertical;
   padding: 12px;
   border: 1px solid #aeb8c2;
   border-radius: 8px;
   font: inherit;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.timeline {
+  display: grid;
+  gap: 10px;
+  padding-left: 24px;
+}
+
+.timeline li {
+  display: grid;
+  gap: 3px;
+}
+
+.timeline span,
+.timeline code {
+  color: #5f6d79;
+  font-size: 0.85rem;
 }
 
 button {

@@ -37,6 +37,7 @@ export default async function FoundationPage({ searchParams }: PageProperties) {
         <p>
           Technical proof of PostgreSQL, BullMQ, worker, and persisted result.
         </p>
+        <a href="/commercial">Open commercial foundation proof</a>
       </header>
 
       <section aria-labelledby="services-title">
