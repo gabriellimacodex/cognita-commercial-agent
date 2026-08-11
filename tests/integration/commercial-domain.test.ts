@@ -6,6 +6,7 @@ import { Migrator } from "kysely/migration";
 
 import {
   CommercialRepository,
+  CommercialDecisionRepository,
   createDatabase,
   FoundationJobRepository,
   migrationProvider,
@@ -14,6 +15,8 @@ import { createLogger } from "@cognita/observability";
 import {
   apiErrorSchema,
   commercialCommandReceiptSchema,
+  commercialDecisionSchema,
+  commercialFactSnapshotSchema,
   commercialTimelineSchema,
   companySchema,
   contactSchema,
@@ -22,6 +25,8 @@ import {
   leadSchema,
   opportunitySchema,
   organizationSchema,
+  type CommercialFactKey,
+  type CommercialRequestedAction,
   type CommercialCommandReceipt,
 } from "@cognita/schemas";
 
@@ -46,6 +51,7 @@ const foundationService = new FoundationJobService(
 );
 const commercialService = new CommercialService(
   new CommercialRepository(database),
+  new CommercialDecisionRepository(database),
   logger,
 );
 const api = await buildApi({
@@ -60,7 +66,7 @@ async function commercialCommand(
   method: "POST" | "PUT",
   path: string,
   payload: Record<string, unknown>,
-  idempotencyKey = randomUUID(),
+  idempotencyKey: string = randomUUID(),
 ) {
   return api.inject({
     method,
@@ -74,7 +80,7 @@ async function successfulCommand(
   method: "POST" | "PUT",
   path: string,
   payload: Record<string, unknown>,
-  idempotencyKey = randomUUID(),
+  idempotencyKey: string = randomUUID(),
 ): Promise<CommercialCommandReceipt> {
   const response = await commercialCommand(
     method,
@@ -114,6 +120,140 @@ async function createLead(organizationId: string, contactId: string) {
     source: "integration-test",
     actorRef: "test-human",
   });
+}
+
+const standardFacts = [
+  ["company_ownership_type", "private"],
+  ["has_existing_sales_process", true],
+  ["uses_crm", true],
+  ["seller_count", 3],
+  ["commercial_owner_defined", true],
+  ["has_recurring_inbound", true],
+  ["monthly_lead_volume", 500],
+  ["average_ticket_brl_cents", 500_000],
+  ["measures_conversion", true],
+  ["roi_provable_within_90_days", true],
+  ["pain_confirmed", true],
+  ["pain_recurring", true],
+  ["pain_measurable", true],
+] as const;
+
+async function recordStandardFacts(
+  organizationId: string,
+  leadId: string,
+  overrides: Partial<Record<(typeof standardFacts)[number][0], unknown>> = {},
+): Promise<void> {
+  for (const [factKey, defaultValue] of standardFacts) {
+    const value = overrides[factKey] ?? defaultValue;
+    await successfulCommand("POST", `/commercial/leads/${leadId}/facts`, {
+      organizationId,
+      factKey,
+      factSchemaVersion: 1,
+      value,
+      sourceType: "human_declaration",
+      sourceRef: "test-human",
+      declarerRef: "test-human",
+      executorRef: "integration-test",
+      observedAt: "2026-08-11T12:00:00.000Z",
+      ...(factKey.startsWith("pain_")
+        ? {
+            evidence: {
+              type: "human_attestation",
+              ref: "integration-standard-fit",
+            },
+          }
+        : {}),
+    });
+  }
+}
+
+async function evaluateDecision(
+  organizationId: string,
+  leadId: string,
+  requestedAction: CommercialRequestedAction,
+  opportunityId?: string,
+  human = false,
+) {
+  const humanReason: Partial<Record<CommercialRequestedAction, string>> = {
+    create_opportunity: "conversion_measurement_gap",
+    transition_to_qualified: "human_qualification_confirmed",
+    transition_to_proposal: "proposal_authorized",
+    transition_to_negotiation: "negotiation_started",
+    transition_to_nurture: "nurture_timing_window_pending",
+    transition_to_won: "commercial_agreement_confirmed",
+    transition_to_lost: "other_human_confirmed",
+    transition_to_disqualified: "crm_not_used",
+  };
+  const response = await commercialCommand(
+    "POST",
+    `/commercial/leads/${leadId}/decisions`,
+    {
+      organizationId,
+      requestedAction,
+      ...(opportunityId == null ? {} : { opportunityId }),
+      authorityType: human ? "declared_human" : "policy",
+      authorityRef: human
+        ? "human:test"
+        : requestedAction === "create_opportunity"
+          ? "opportunity-eligibility@1.0.0"
+          : "commercial-state-gates@1.0.0",
+      executorRef: "integration-test",
+      ...(human
+        ? {
+            reasonCode: humanReason[requestedAction],
+            evidence: {
+              type: "human_attestation",
+              ref: "integration-human-decision",
+            },
+          }
+        : {}),
+    },
+  );
+  expect(response.statusCode).toBe(201);
+  return commercialDecisionSchema.parse(response.json());
+}
+
+async function recordFact(
+  organizationId: string,
+  leadId: string,
+  factKey: CommercialFactKey,
+  value: unknown,
+  options: {
+    idempotencyKey?: string;
+    correctsFactIds?: string[];
+  } = {},
+) {
+  return successfulCommand(
+    "POST",
+    `/commercial/leads/${leadId}/facts`,
+    {
+      organizationId,
+      factKey,
+      factSchemaVersion: 1,
+      value,
+      sourceType: "human_declaration",
+      sourceRef: "test-human",
+      declarerRef: "test-human",
+      executorRef: "integration-test",
+      observedAt: "2026-08-11T12:00:00.000Z",
+      ...(factKey.startsWith("pain_") || options.correctsFactIds != null
+        ? {
+            evidence: {
+              type: "human_attestation",
+              ref: "integration-fact-evidence",
+            },
+          }
+        : {}),
+      ...(options.correctsFactIds == null
+        ? {}
+        : {
+            correctsFactIds: options.correctsFactIds,
+            authorityType: "declared_human",
+            authorityRef: "test-human",
+          }),
+    },
+    options.idempotencyKey,
+  );
 }
 
 describe("commercial domain foundation", () => {
@@ -185,10 +325,27 @@ describe("commercial domain foundation", () => {
         actorRef: "test-human",
       },
     );
+    await recordStandardFacts(organizationId, lead.targetId!);
+    const opportunityDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+    );
     const opportunity = await successfulCommand(
       "POST",
       "/commercial/opportunities",
-      { organizationId, leadId: lead.targetId, actorRef: "test-human" },
+      {
+        organizationId,
+        leadId: lead.targetId,
+        decisionId: opportunityDecision.id,
+        actorRef: "test-human",
+      },
+    );
+    const discoveryDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_discovery",
+      opportunity.targetId!,
     );
     await successfulCommand(
       "POST",
@@ -196,7 +353,8 @@ describe("commercial domain foundation", () => {
       {
         organizationId,
         toState: "discovery",
-        reasonCode: "human_review_started",
+        reasonCode: "discovery_started",
+        decisionId: discoveryDecision.id,
         actorRef: "test-human",
       },
     );
@@ -250,7 +408,8 @@ describe("commercial domain foundation", () => {
     expect(context.assignment?.assigneeRef).toBe("test-owner");
     expect(context.opportunity?.commercialState).toBe("discovery");
     expect(context.conversations[0]?.messages[0]?.sequence).toBe(1);
-    expect(timeline.items.map((event) => event.eventType)).toEqual([
+    const eventTypes = timeline.items.map((event) => event.eventType);
+    expect(eventTypes.slice(0, 22)).toEqual([
       "company_created",
       "contact_created",
       "contact_linked",
@@ -259,9 +418,19 @@ describe("commercial domain foundation", () => {
       "owner_assigned",
       "conversation_started",
       "message_received",
-      "opportunity_created",
-      "state_changed",
+      ...Array.from(
+        { length: standardFacts.length },
+        () => "commercial_fact_recorded" as const,
+      ),
+      "commercial_decision_evaluated",
     ]);
+    expect(eventTypes.slice(22, 24).sort()).toEqual(
+      ["commercial_decision_applied", "opportunity_created"].sort(),
+    );
+    expect(eventTypes[24]).toBe("commercial_decision_evaluated");
+    expect(eventTypes.slice(25, 27).sort()).toEqual(
+      ["commercial_decision_applied", "state_changed"].sort(),
+    );
   });
 
   it("treats CNPJ as strong identity without merging ambiguous Company fields", async () => {
@@ -299,6 +468,333 @@ describe("commercial domain foundation", () => {
     expect(apiErrorSchema.parse(strongConflict.json()).error.code).toBe(
       "COMPANY_CNPJ_CONFLICT",
     );
+  });
+
+  it("keeps Fact replay, conflict and complete-set correction deterministic", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    const key = randomUUID();
+    const first = await recordFact(
+      organizationId,
+      lead.targetId!,
+      "measures_conversion",
+      true,
+      { idempotencyKey: key },
+    );
+    const replay = await recordFact(
+      organizationId,
+      lead.targetId!,
+      "measures_conversion",
+      true,
+      { idempotencyKey: key },
+    );
+    expect(replay).toEqual(first);
+
+    const conflict = await commercialCommand(
+      "POST",
+      `/commercial/leads/${lead.targetId}/facts`,
+      {
+        organizationId,
+        factKey: "measures_conversion",
+        factSchemaVersion: 1,
+        value: false,
+        sourceType: "human_declaration",
+        sourceRef: "test-human",
+        declarerRef: "test-human",
+        executorRef: "integration-test",
+        observedAt: "2026-08-11T12:00:00.000Z",
+      },
+      key,
+    );
+    expect(conflict.statusCode).toBe(409);
+
+    const [second, third] = await Promise.all([
+      recordFact(organizationId, lead.targetId!, "measures_conversion", false),
+      recordFact(organizationId, lead.targetId!, "measures_conversion", true),
+    ]);
+    const conflictingResponse = await api.inject({
+      method: "GET",
+      url: `/commercial/leads/${lead.targetId}/facts?organizationId=${organizationId}`,
+    });
+    const conflicting = commercialFactSnapshotSchema
+      .array()
+      .parse(conflictingResponse.json());
+    expect(conflicting).toMatchObject([
+      {
+        factKey: "measures_conversion",
+        status: "conflicting",
+        value: null,
+      },
+    ]);
+
+    const partialCorrection = await commercialCommand(
+      "POST",
+      `/commercial/leads/${lead.targetId}/facts`,
+      {
+        organizationId,
+        factKey: "measures_conversion",
+        factSchemaVersion: 1,
+        value: true,
+        sourceType: "human_declaration",
+        sourceRef: "test-human",
+        declarerRef: "test-human",
+        executorRef: "integration-test",
+        observedAt: "2026-08-11T12:00:00.000Z",
+        evidence: {
+          type: "human_attestation",
+          ref: "integration-partial-correction",
+        },
+        correctsFactIds: [first.targetId],
+        authorityType: "declared_human",
+        authorityRef: "test-human",
+      },
+    );
+    expect(partialCorrection.statusCode).toBe(409);
+
+    await recordFact(
+      organizationId,
+      lead.targetId!,
+      "measures_conversion",
+      true,
+      {
+        correctsFactIds: [second.targetId!, first.targetId!, third.targetId!],
+      },
+    );
+    const correctedResponse = await api.inject({
+      method: "GET",
+      url: `/commercial/leads/${lead.targetId}/facts?organizationId=${organizationId}`,
+    });
+    const corrected = commercialFactSnapshotSchema
+      .array()
+      .parse(correctedResponse.json());
+    expect(corrected).toMatchObject([
+      {
+        factKey: "measures_conversion",
+        status: "consistent",
+        value: true,
+        facts: [
+          {
+            correctedFactIds: [
+              first.targetId,
+              second.targetId,
+              third.targetId,
+            ].sort(),
+          },
+        ],
+      },
+    ]);
+    const historicalFacts = await database
+      .selectFrom("commercialFacts")
+      .select("id")
+      .where("organizationId", "=", organizationId)
+      .where("leadId", "=", lead.targetId!)
+      .execute();
+    const correctionLinks = await database
+      .selectFrom("commercialFactCorrections")
+      .select("correctedFactId")
+      .where("organizationId", "=", organizationId)
+      .execute();
+    expect(historicalFacts).toHaveLength(4);
+    expect(correctionLinks).toHaveLength(3);
+  });
+
+  it("separates missing information, human review and hard exclusions", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    const missing = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+    );
+    expect(missing.outcome).toBe("require_information");
+
+    await recordStandardFacts(organizationId, lead.targetId!, {
+      measures_conversion: false,
+    });
+    const review = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+    );
+    expect(review.outcome).toBe("require_human_review");
+    expect(review.reasonCodes).toContain("conversion_measurement_gap");
+    const human = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+      undefined,
+      true,
+    );
+    expect(human.outcome).toBe("allow");
+
+    const excludedOrganizationId = await createOrganization();
+    const excludedContact = await createContact(excludedOrganizationId);
+    const excludedLead = await createLead(
+      excludedOrganizationId,
+      excludedContact.targetId!,
+    );
+    await recordStandardFacts(excludedOrganizationId, excludedLead.targetId!, {
+      uses_crm: false,
+    });
+    const policyBlock = await evaluateDecision(
+      excludedOrganizationId,
+      excludedLead.targetId!,
+      "create_opportunity",
+    );
+    const humanBlock = await evaluateDecision(
+      excludedOrganizationId,
+      excludedLead.targetId!,
+      "create_opportunity",
+      undefined,
+      true,
+    );
+    expect(policyBlock.outcome).toBe("block");
+    expect(humanBlock.outcome).toBe("block");
+    expect(humanBlock.reasonCodes).toContain("crm_not_used");
+  });
+
+  it("rejects a Decision after the active Fact set changes", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    await recordStandardFacts(organizationId, lead.targetId!);
+    const decision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+    );
+    expect(decision.outcome).toBe("allow");
+    await recordFact(organizationId, lead.targetId!, "pain_confirmed", true);
+    const stale = await commercialCommand("POST", "/commercial/opportunities", {
+      organizationId,
+      leadId: lead.targetId,
+      decisionId: decision.id,
+      actorRef: "test-human",
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(stale.json()).error.code).toBe(
+      "DECISION_STALE",
+    );
+  });
+
+  it("requires declared human authority for qualification and terminal actions", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    await recordStandardFacts(organizationId, lead.targetId!);
+    const creationDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+    );
+    const opportunity = await successfulCommand(
+      "POST",
+      "/commercial/opportunities",
+      {
+        organizationId,
+        leadId: lead.targetId,
+        decisionId: creationDecision.id,
+        actorRef: "test-human",
+      },
+    );
+    const discoveryDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_discovery",
+      opportunity.targetId!,
+    );
+    await successfulCommand(
+      "POST",
+      `/commercial/opportunities/${opportunity.targetId}/transitions`,
+      {
+        organizationId,
+        toState: "discovery",
+        reasonCode: "discovery_started",
+        decisionId: discoveryDecision.id,
+        actorRef: "test-human",
+      },
+    );
+    await Promise.all([
+      recordFact(
+        organizationId,
+        lead.targetId!,
+        "decision_maker_access_confirmed",
+        true,
+      ),
+      recordFact(organizationId, lead.targetId!, "budget_confirmed", true),
+      recordFact(
+        organizationId,
+        lead.targetId!,
+        "operational_capacity_confirmed",
+        true,
+      ),
+      recordFact(
+        organizationId,
+        lead.targetId!,
+        "timing_status",
+        "available_now",
+      ),
+    ]);
+
+    const policyQualification = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_qualified",
+      opportunity.targetId!,
+    );
+    expect(policyQualification.outcome).toBe("require_human_review");
+    const humanQualification = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_qualified",
+      opportunity.targetId!,
+      true,
+    );
+    expect(humanQualification.outcome).toBe("allow");
+    await successfulCommand(
+      "POST",
+      `/commercial/opportunities/${opportunity.targetId}/transitions`,
+      {
+        organizationId,
+        toState: "qualified",
+        reasonCode: "human_qualification_confirmed",
+        decisionId: humanQualification.id,
+        actorRef: "test-human",
+      },
+    );
+
+    const policyLost = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_lost",
+      opportunity.targetId!,
+    );
+    expect(policyLost.outcome).toBe("require_human_review");
+    const humanLost = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_lost",
+      opportunity.targetId!,
+      true,
+    );
+    await successfulCommand(
+      "POST",
+      `/commercial/opportunities/${opportunity.targetId}/transitions`,
+      {
+        organizationId,
+        toState: "lost",
+        reasonCode: "other_human_confirmed",
+        decisionId: humanLost.id,
+        actorRef: "test-human",
+      },
+    );
+    const persisted = await commercialService.getOpportunity(
+      organizationId,
+      opportunity.targetId!,
+    );
+    expect(persisted.commercialState).toBe("lost");
   });
 
   it("supports Contact and Lead without Company, multiple Leads and later explicit linkage", async () => {
@@ -554,10 +1050,21 @@ describe("commercial domain foundation", () => {
     expect(activeAssignments).toHaveLength(1);
     expect(allAssignments).toHaveLength(2);
 
+    await recordStandardFacts(organizationId, lead.targetId!);
+    const opportunityDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+    );
     const opportunity = await successfulCommand(
       "POST",
       "/commercial/opportunities",
-      { organizationId, leadId: lead.targetId, actorRef: "test-human" },
+      {
+        organizationId,
+        leadId: lead.targetId,
+        decisionId: opportunityDecision.id,
+        actorRef: "test-human",
+      },
     );
     const persistedLead = await commercialService.getLead(
       organizationId,
@@ -566,19 +1073,34 @@ describe("commercial domain foundation", () => {
     const secondOpportunity = await commercialCommand(
       "POST",
       "/commercial/opportunities",
-      { organizationId, leadId: lead.targetId, actorRef: "test-human" },
+      {
+        organizationId,
+        leadId: lead.targetId,
+        decisionId: opportunityDecision.id,
+        actorRef: "test-human",
+      },
     );
     expect(persistedLead.status).toBe("converted");
-    expect(secondOpportunity.statusCode).toBe(422);
+    expect(secondOpportunity.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(secondOpportunity.json()).error.code).toBe(
+      "DECISION_ALREADY_APPLIED",
+    );
 
     const transitionKey = randomUUID();
+    const discoveryDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_discovery",
+      opportunity.targetId!,
+    );
     const firstTransition = await successfulCommand(
       "POST",
       `/commercial/opportunities/${opportunity.targetId}/transitions`,
       {
         organizationId,
         toState: "discovery",
-        reasonCode: "started",
+        reasonCode: "discovery_started",
+        decisionId: discoveryDecision.id,
         actorRef: "test-human",
       },
       transitionKey,
@@ -589,10 +1111,17 @@ describe("commercial domain foundation", () => {
       {
         organizationId,
         toState: "discovery",
-        reasonCode: "started",
+        reasonCode: "discovery_started",
+        decisionId: discoveryDecision.id,
         actorRef: "test-human",
       },
       transitionKey,
+    );
+    const invalidDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_proposal",
+      opportunity.targetId!,
     );
     const invalid = await commercialCommand(
       "POST",
@@ -600,9 +1129,17 @@ describe("commercial domain foundation", () => {
       {
         organizationId,
         toState: "proposal",
-        reasonCode: "skipped",
+        reasonCode: "proposal_authorized",
+        decisionId: invalidDecision.id,
         actorRef: "test-human",
       },
+    );
+    const lostDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_lost",
+      opportunity.targetId!,
+      true,
     );
     await successfulCommand(
       "POST",
@@ -610,9 +1147,16 @@ describe("commercial domain foundation", () => {
       {
         organizationId,
         toState: "lost",
-        reasonCode: "human_decision",
+        reasonCode: "other_human_confirmed",
+        decisionId: lostDecision.id,
         actorRef: "test-human",
       },
+    );
+    const terminalDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_nurture",
+      opportunity.targetId!,
     );
     const terminalRegression = await commercialCommand(
       "POST",
@@ -620,7 +1164,8 @@ describe("commercial domain foundation", () => {
       {
         organizationId,
         toState: "nurture",
-        reasonCode: "regression",
+        reasonCode: "nurture_timing_window_pending",
+        decisionId: terminalDecision.id,
         actorRef: "test-human",
       },
     );

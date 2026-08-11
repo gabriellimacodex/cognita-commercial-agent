@@ -1,11 +1,13 @@
 # Cognita Commercial Agent
 
-Fundação técnica do Cognita Commercial Agent. O Épico 01 comprova, sem lógica
-comercial, a persistência e o processamento assíncrono de um job técnico
-SHA-256.
+Fundação técnica e domínio comercial determinístico do Cognita Commercial
+Agent. O Épico 01 comprova a entrega durável de um job técnico; os Épicos 02 e
+03 acrescentam o domínio comercial, Facts auditáveis, policies versionadas e
+Decision Records, sem IA ou canais externos.
 
 Leia `AGENTS.md` antes de modificar o repositório. Decisões estruturais da
-fundação estão registradas nas ADRs 005, 006 e 007.
+fundação estão registradas nas ADRs 005, 006 e 007. O domínio e o engine
+comerciais seguem as ADRs 008, 009, 010 e 011.
 
 ## Vertical slice da fundação
 
@@ -16,6 +18,17 @@ O fluxo executável é:
 O PostgreSQL é a fonte de verdade. Redis e BullMQ são transporte e coordenação.
 O cockpit pode recarregar um job pelo identificador armazenado na URL e consulta
 novamente o estado persistido.
+
+## Vertical slice comercial
+
+O fluxo comercial local é síncrono e usa PostgreSQL como fonte de verdade:
+
+`Cockpit → API → Facts → Decision → Opportunity/Commercial State → API → Cockpit`
+
+O cockpit demonstra standard fit e revisão humana declarada. Facts, Decisions,
+aplicações e Commercial Events permanecem auditáveis após recarregar a página.
+`declared_human` não ignora integridade estrutural, conflito de Facts ou hard
+exclusion.
 
 ## Estrutura implementada
 
@@ -29,9 +42,9 @@ novamente o estado persistido.
 - `tests`: integração real e E2E do cockpit.
 - `tools/governance`: tooling isolado do Cognita Engineering Framework.
 
-Não existem packages comerciais, de IA ou de integrações neste épico. A tabela
-`organizations` é apenas preparação estrutural e não implementa isolamento,
-autorização ou multi-tenancy.
+Não existem packages de IA ou de integrações. A tabela `organizations` delimita
+as relações locais, mas não implementa autenticação, autorização ou
+multi-tenancy seguro.
 
 ## Toolchain exata
 
@@ -105,4 +118,6 @@ do n8n e shutdown do worker.
   aplicação.
 - AOF do Redis é opcional no override de desenvolvimento e não fornece a
   garantia de durabilidade do job.
-- Não existe deploy externo autorizado no Épico 01.
+- Não existe deploy externo autorizado.
+- Não existem score, confidence, inferência por IA, LLM, CRM, WhatsApp ou
+  automação comercial externa nos Épicos 02 e 03.
