@@ -91,9 +91,13 @@ jobs:
           pnpm db:migrate:down
           docker compose -f compose.yaml -f compose.dev.yaml exec -T postgres \
             psql -U cognita_foundation -d cognita_foundation -Atc \
-            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('organizations','foundation_jobs');" \
+            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('organizations','foundation_jobs','commercial_commands','companies','contacts','leads','opportunities','conversations','messages','lead_assignments','commercial_events');" \
             | grep --fixed-strings --line-regexp "0"
           pnpm db:migrate
+          docker compose -f compose.yaml -f compose.dev.yaml exec -T postgres \
+            psql -U cognita_foundation -d cognita_foundation -Atc \
+            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('organizations','foundation_jobs','commercial_commands','companies','contacts','leads','opportunities','conversations','messages','lead_assignments','commercial_events');" \
+            | grep --fixed-strings --line-regexp "11"
 
       - name: Run integration and failure tests
         run: pnpm test:integration
