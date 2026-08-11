@@ -31,6 +31,8 @@ import type {
   OpportunityRow,
   OrganizationRow,
 } from "./schema.js";
+import type { DecisionEvaluator } from "./commercial-decision-repository.js";
+import { buildCommercialFactSnapshots } from "./commercial-fact-snapshot.js";
 
 type TransactionExecutor = Transaction<DatabaseSchema>;
 type EventMetadata = Record<string, string | number | boolean | null>;
@@ -95,6 +97,9 @@ interface MutationReceipt {
   eventId: string | null;
   resultCode?: string;
   httpStatus?: number;
+  decisionId?: string;
+  decisionLeadId?: string;
+  decisionActorRef?: string;
 }
 
 interface CommercialEventInput {
@@ -778,7 +783,9 @@ export class CommercialRepository {
     command: CommercialCommandExecution,
     opportunityId: string,
     leadId: string,
+    decisionId: string,
     actorRef: string,
+    evaluateDecision: DecisionEvaluator,
   ): Promise<CommandResult> {
     return this.runCommand(command, async (transaction) => {
       const lead = await this.requireLead(
@@ -787,12 +794,29 @@ export class CommercialRepository {
         leadId,
         true,
       );
+      await this.requireDecisionUnused(
+        transaction,
+        command.organizationId,
+        decisionId,
+      );
       if (lead.status !== "open") {
         throw new CommercialInvariantError(
           "LEAD_NOT_OPEN",
           "Only an open Lead can be converted to an Opportunity",
         );
       }
+      await this.requireApplicableDecision(
+        transaction,
+        command.organizationId,
+        decisionId,
+        leadId,
+        null,
+        "create_opportunity",
+        null,
+        lead.status,
+        null,
+        evaluateDecision,
+      );
       const existing = await transaction
         .selectFrom("opportunities")
         .select("id")
@@ -834,7 +858,13 @@ export class CommercialRepository {
         actorRef,
         metadata: { initialState: "open" },
       });
-      return { targetId: opportunityId, eventId };
+      return {
+        targetId: opportunityId,
+        eventId,
+        decisionId,
+        decisionLeadId: leadId,
+        decisionActorRef: actorRef,
+      };
     });
   }
 
@@ -843,11 +873,13 @@ export class CommercialRepository {
     opportunityId: string,
     toState: OpportunityState,
     reasonCode: string,
+    decisionId: string,
     actorRef: string,
     validateTransition: (
       fromState: OpportunityState,
       toState: OpportunityState,
     ) => void,
+    evaluateDecision: DecisionEvaluator,
   ): Promise<CommandResult> {
     let transitionedFrom: OpportunityState | undefined;
     return this.runCommand(command, async (transaction) => {
@@ -859,7 +891,24 @@ export class CommercialRepository {
         .forUpdate()
         .executeTakeFirst();
       if (current == null) throw new CommercialNotFoundError("Opportunity");
+      await this.requireDecisionUnused(
+        transaction,
+        command.organizationId,
+        decisionId,
+      );
       validateTransition(current.commercialState, toState);
+      await this.requireApplicableDecision(
+        transaction,
+        command.organizationId,
+        decisionId,
+        current.leadId,
+        opportunityId,
+        `transition_to_${toState}`,
+        reasonCode,
+        "converted",
+        current.commercialState,
+        evaluateDecision,
+      );
       transitionedFrom = current.commercialState;
       await transaction
         .updateTable("opportunities")
@@ -881,7 +930,13 @@ export class CommercialRepository {
         actorRef,
         metadata: { fromState: current.commercialState, toState, reasonCode },
       });
-      return { targetId: opportunityId, eventId };
+      return {
+        targetId: opportunityId,
+        eventId,
+        decisionId,
+        decisionLeadId: current.leadId,
+        decisionActorRef: actorRef,
+      };
     }).then((result) =>
       transitionedFrom == null || result.replayed
         ? result
@@ -1164,6 +1219,37 @@ export class CommercialRepository {
     }
 
     const result = await mutation();
+    if (
+      result.decisionId != null &&
+      result.decisionLeadId != null &&
+      result.decisionActorRef != null &&
+      result.targetId != null
+    ) {
+      await transaction
+        .insertInto("commercialDecisionApplications")
+        .values({
+          id: randomUUID(),
+          organizationId: command.organizationId,
+          decisionId: result.decisionId,
+          commandId,
+          targetType: command.targetType,
+          targetId: result.targetId,
+        })
+        .execute();
+      await this.insertEvent(transaction, {
+        organizationId: command.organizationId,
+        subjectType: "commercial_decision",
+        subjectId: result.decisionId,
+        leadId: result.decisionLeadId,
+        eventType: "commercial_decision_applied",
+        actorRef: result.decisionActorRef,
+        metadata: {
+          decisionId: result.decisionId,
+          targetType: command.targetType,
+          targetId: result.targetId,
+        },
+      });
+    }
     const completed = await transaction
       .updateTable("commercialCommands")
       .set({
@@ -1178,6 +1264,193 @@ export class CommercialRepository {
       .returningAll()
       .executeTakeFirstOrThrow();
     return { receipt: serializeReceipt(completed), replayed: false };
+  }
+
+  private async requireApplicableDecision(
+    transaction: TransactionExecutor,
+    organizationId: string,
+    decisionId: string,
+    leadId: string,
+    opportunityId: string | null,
+    requestedAction: string,
+    applicationReasonCode: string | null,
+    leadStatus: string,
+    opportunityState: OpportunityState | null,
+    evaluateDecision: DecisionEvaluator,
+  ): Promise<void> {
+    const decision = await transaction
+      .selectFrom("commercialDecisions")
+      .selectAll()
+      .where("organizationId", "=", organizationId)
+      .where("id", "=", decisionId)
+      .forUpdate()
+      .executeTakeFirst();
+    if (decision == null) throw new CommercialNotFoundError("Decision");
+    if (
+      decision.leadId !== leadId ||
+      decision.opportunityId !== opportunityId ||
+      decision.requestedAction !== requestedAction ||
+      decision.outcome !== "allow" ||
+      !decision.eligibleActions.some(
+        (eligible) =>
+          eligible.action === decision.requestedAction &&
+          eligible.authorityType === decision.authorityType,
+      )
+    ) {
+      throw new CommercialInvariantError(
+        "DECISION_NOT_APPLICABLE",
+        "Decision does not authorize this exact commercial action",
+      );
+    }
+    if (
+      decision.authorityType === "declared_human" &&
+      applicationReasonCode != null &&
+      decision.humanReasonCode !== applicationReasonCode
+    ) {
+      throw new CommercialInvariantError(
+        "DECISION_NOT_APPLICABLE",
+        "Human Decision reason does not match the material transition",
+      );
+    }
+    const snapshot = decision.inputSnapshot;
+    if (
+      snapshot["leadStatus"] !== leadStatus ||
+      snapshot["opportunityId"] !== opportunityId ||
+      snapshot["opportunityState"] !== opportunityState
+    ) {
+      throw new CommercialConflictError(
+        "DECISION_STALE",
+        "Commercial state changed after Decision evaluation",
+      );
+    }
+    const lead = await transaction
+      .selectFrom("leads")
+      .selectAll()
+      .where("organizationId", "=", organizationId)
+      .where("id", "=", leadId)
+      .forUpdate()
+      .executeTakeFirstOrThrow();
+    const [contact, opportunity, facts, references, application] =
+      await Promise.all([
+        transaction
+          .selectFrom("contacts")
+          .selectAll()
+          .where("organizationId", "=", organizationId)
+          .where("id", "=", lead.contactId)
+          .executeTakeFirstOrThrow(),
+        opportunityId == null
+          ? Promise.resolve(undefined)
+          : transaction
+              .selectFrom("opportunities")
+              .selectAll()
+              .where("organizationId", "=", organizationId)
+              .where("id", "=", opportunityId)
+              .executeTakeFirst(),
+        buildCommercialFactSnapshots(transaction, organizationId, leadId),
+        transaction
+          .selectFrom("commercialDecisionFacts")
+          .select("factId")
+          .where("organizationId", "=", organizationId)
+          .where("decisionId", "=", decisionId)
+          .orderBy("factId")
+          .execute(),
+        transaction
+          .selectFrom("commercialDecisionApplications")
+          .select("id")
+          .where("organizationId", "=", organizationId)
+          .where("decisionId", "=", decisionId)
+          .executeTakeFirst(),
+      ]);
+    const currentEvaluation = evaluateDecision(
+      {
+        organizationId,
+        requestedAction: decision.requestedAction,
+        authorityType: decision.authorityType,
+        authorityRef: decision.authorityRef,
+        executorRef: decision.executorRef,
+        ...(decision.opportunityId == null
+          ? {}
+          : { opportunityId: decision.opportunityId }),
+        ...(decision.humanReasonCode == null
+          ? {}
+          : { reasonCode: decision.humanReasonCode }),
+        ...(decision.humanEvidenceType == null ||
+        decision.humanEvidenceRef == null
+          ? {}
+          : {
+              evidence: {
+                type: decision.humanEvidenceType,
+                ref: decision.humanEvidenceRef,
+              },
+            }),
+      },
+      {
+        lead: serializeLead(lead),
+        contactHasChannel:
+          contact.normalizedEmail != null || contact.normalizedPhone != null,
+        opportunity:
+          opportunity == null ? null : serializeOpportunity(opportunity),
+        facts,
+        now: new Date().toISOString(),
+      },
+    );
+    if (
+      currentEvaluation.inputFingerprint !== decision.inputFingerprint ||
+      currentEvaluation.policyKey !== decision.policyKey ||
+      currentEvaluation.policyVersion !== decision.policyVersion ||
+      currentEvaluation.policyDigest !== decision.policyDigest ||
+      currentEvaluation.outcome !== "allow" ||
+      !currentEvaluation.eligibleActions.some(
+        (eligible) =>
+          eligible.action === decision.requestedAction &&
+          eligible.authorityType === decision.authorityType,
+      )
+    ) {
+      throw new CommercialConflictError(
+        "DECISION_STALE",
+        "Decision input no longer produces the persisted authorization",
+      );
+    }
+    const activeFacts = facts
+      .flatMap((fact) => fact.facts)
+      .map((fact) => ({ id: fact.id }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    if (application != null) {
+      throw new CommercialConflictError(
+        "DECISION_ALREADY_APPLIED",
+        "Decision already has a material application",
+      );
+    }
+    const expected = references.map((reference) => reference.factId);
+    const current = activeFacts.map((fact) => fact.id);
+    if (
+      expected.length !== current.length ||
+      expected.some((id, index) => id !== current[index])
+    ) {
+      throw new CommercialConflictError(
+        "DECISION_STALE",
+        "Active Facts changed after Decision evaluation",
+      );
+    }
+  }
+
+  private async requireDecisionUnused(
+    transaction: TransactionExecutor,
+    organizationId: string,
+    decisionId: string,
+  ): Promise<void> {
+    const application = await transaction
+      .selectFrom("commercialDecisionApplications")
+      .select("id")
+      .where("organizationId", "=", organizationId)
+      .where("decisionId", "=", decisionId)
+      .executeTakeFirst();
+    if (application != null) {
+      throw new CommercialConflictError(
+        "DECISION_ALREADY_APPLIED",
+        "Decision already has a material application",
+      );
+    }
   }
 
   private async insertEvent(

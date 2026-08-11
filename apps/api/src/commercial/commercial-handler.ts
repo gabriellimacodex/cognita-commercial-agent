@@ -4,11 +4,16 @@ import { z, type ZodType } from "zod";
 import {
   assignLeadInputSchema,
   commercialCommandReceiptSchema,
+  commercialDecisionContextSchema,
+  commercialDecisionSchema,
+  commercialFactSnapshotSchema,
   commercialTimelineSchema,
   companySchema,
   contactSchema,
   conversationSchema,
   createCompanyInputSchema,
+  createCommercialDecisionInputSchema,
+  createCommercialFactInputSchema,
   createContactInputSchema,
   createConversationInputSchema,
   createLeadInputSchema,
@@ -92,6 +97,46 @@ export class CommercialHandler {
     await reply
       .status(result.receipt.httpStatus)
       .send(commercialCommandReceiptSchema.parse(result.receipt));
+  };
+
+  public recordFact = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const parsed = parseCommand(
+      request,
+      reply,
+      createCommercialFactInputSchema,
+    );
+    if (id == null || parsed == null) return;
+    const result = await this.service.recordFact(
+      id,
+      parsed.input,
+      parsed.idempotencyKey,
+    );
+    await reply
+      .status(result.receipt.httpStatus)
+      .send(commercialCommandReceiptSchema.parse(result.receipt));
+  };
+
+  public evaluateDecision = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const parsed = parseCommand(
+      request,
+      reply,
+      createCommercialDecisionInputSchema,
+    );
+    if (id == null || parsed == null) return;
+    const result = await this.service.evaluateDecision(
+      id,
+      parsed.input,
+      parsed.idempotencyKey,
+    );
+    await reply.status(201).send(commercialDecisionSchema.parse(result));
   };
 
   public createCompany = async (
@@ -265,6 +310,18 @@ export class CommercialHandler {
   public getLeadContext = this.readWithOrganization(
     (organizationId, id) => this.service.getLeadContext(organizationId, id),
     leadContextSchema,
+  );
+  public listFacts = this.readWithOrganization(
+    (organizationId, id) => this.service.listFacts(organizationId, id),
+    z.array(commercialFactSnapshotSchema),
+  );
+  public getDecision = this.readWithOrganization(
+    (organizationId, id) => this.service.getDecision(organizationId, id),
+    commercialDecisionSchema,
+  );
+  public getDecisionContext = this.readWithOrganization(
+    (organizationId, id) => this.service.getDecisionContext(organizationId, id),
+    commercialDecisionContextSchema,
   );
 
   public getLeadTimeline = async (

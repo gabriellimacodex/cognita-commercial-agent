@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  type CommercialDecisionRepository,
   CommercialNotFoundError,
   type CommandResult,
   type CommercialCommandExecution,
@@ -9,11 +10,16 @@ import {
 import type { Logger } from "@cognita/observability";
 import type {
   AssignLeadInput,
+  CommercialDecision,
+  CommercialDecisionContext,
+  CommercialFactSnapshot,
   CommercialTimeline,
   Company,
   Contact,
   Conversation,
   CreateCompanyInput,
+  CreateCommercialDecisionInput,
+  CreateCommercialFactInput,
   CreateContactInput,
   CreateConversationInput,
   CreateLeadInput,
@@ -38,6 +44,8 @@ import {
   normalizeEmail,
   normalizePhone,
 } from "./commercial-domain.js";
+import { evaluateCommercialDecision } from "./commercial-decision-engine.js";
+import { validateCommercialFact } from "./commercial-fact-catalog.js";
 
 function command(
   organizationId: string,
@@ -70,8 +78,153 @@ function command(
 export class CommercialService {
   public constructor(
     private readonly repository: CommercialRepository,
+    private readonly decisionRepository: CommercialDecisionRepository,
     private readonly logger: Logger,
   ) {}
+
+  public async recordFact(
+    leadId: string,
+    input: CreateCommercialFactInput,
+    idempotencyKey: string,
+  ): Promise<CommandResult> {
+    const valueType = validateCommercialFact(input);
+    const semantic = {
+      leadId,
+      factKey: input.factKey,
+      factSchemaVersion: input.factSchemaVersion,
+      value: input.value,
+      sourceType: input.sourceType,
+      sourceRef: input.sourceRef,
+      declarerRef: input.declarerRef,
+      executorRef: input.executorRef,
+      observedAt: input.observedAt,
+      evidence: input.evidence ?? null,
+      correctsFactIds: [...input.correctsFactIds].sort(),
+      authorityType: input.authorityType ?? null,
+      authorityRef: input.authorityRef ?? null,
+    };
+    const result = await this.decisionRepository.createFact(
+      command(
+        input.organizationId,
+        "record_commercial_fact_v1",
+        idempotencyKey,
+        { leadId },
+        semantic,
+        input.executorRef,
+        "commercial_fact",
+        "COMMERCIAL_FACT_RECORDED",
+      ),
+      {
+        id: randomUUID(),
+        organizationId: input.organizationId,
+        leadId,
+        factKey: input.factKey,
+        factSchemaVersion: input.factSchemaVersion,
+        valueType,
+        value: input.value,
+        sourceType: input.sourceType,
+        sourceRef: input.sourceRef,
+        declarerRef: input.declarerRef,
+        authorityType: input.authorityType ?? null,
+        authorityRef: input.authorityRef ?? null,
+        executorRef: input.executorRef,
+        evidenceType: input.evidence?.type ?? null,
+        evidenceRef: input.evidence?.ref ?? null,
+        observedAt: new Date(input.observedAt),
+        correctsFactIds: input.correctsFactIds,
+      },
+    );
+    this.logger.info(
+      {
+        event: result.replayed
+          ? "commercial_fact_replayed"
+          : "commercial_fact_recorded",
+        organizationId: input.organizationId,
+        leadId,
+        factId: result.receipt.targetId,
+        factKey: input.factKey,
+      },
+      result.replayed ? "Commercial Fact replayed" : "Commercial Fact recorded",
+    );
+    return this.report(result);
+  }
+
+  public listFacts(
+    organizationId: string,
+    leadId: string,
+  ): Promise<CommercialFactSnapshot[]> {
+    return this.decisionRepository.listFacts(organizationId, leadId);
+  }
+
+  public async evaluateDecision(
+    leadId: string,
+    input: CreateCommercialDecisionInput,
+    idempotencyKey: string,
+  ): Promise<CommercialDecision> {
+    const result = await this.decisionRepository.createDecision(
+      command(
+        input.organizationId,
+        "evaluate_commercial_decision_v1",
+        idempotencyKey,
+        { leadId },
+        input,
+        input.executorRef,
+        "commercial_decision",
+        "COMMERCIAL_DECISION_EVALUATED",
+      ),
+      leadId,
+      input,
+      evaluateCommercialDecision,
+    );
+    this.report(result);
+    const decision =
+      result.receipt.targetId == null
+        ? undefined
+        : await this.decisionRepository.findDecision(
+            input.organizationId,
+            result.receipt.targetId,
+          );
+    if (decision == null) throw new CommercialNotFoundError("Decision");
+    this.logger.info(
+      {
+        event: result.replayed
+          ? "commercial_decision_replayed"
+          : decision.escalationRequired
+            ? "commercial_decision_escalated"
+            : "commercial_decision_evaluated",
+        organizationId: input.organizationId,
+        leadId,
+        decisionId: decision.id,
+        requestedAction: decision.requestedAction,
+        outcome: decision.outcome,
+        policyKey: decision.policyKey,
+        policyVersion: decision.policyVersion,
+      },
+      result.replayed
+        ? "Commercial Decision replayed"
+        : "Commercial Decision evaluated",
+    );
+    return decision;
+  }
+
+  public async getDecision(
+    organizationId: string,
+    decisionId: string,
+  ): Promise<CommercialDecision> {
+    const decision = await this.decisionRepository.findDecision(
+      organizationId,
+      decisionId,
+    );
+    if (decision == null) throw new CommercialNotFoundError("Decision");
+    return decision;
+  }
+
+  public getDecisionContext(
+    organizationId: string,
+    leadId: string,
+  ): Promise<CommercialDecisionContext> {
+    return this.decisionRepository.getDecisionContext(organizationId, leadId);
+  }
 
   public async createOrganization(
     input: CreateOrganizationInput,
@@ -346,14 +499,16 @@ export class CommercialService {
           "create_opportunity_v1",
           idempotencyKey,
           {},
-          { leadId: input.leadId },
+          { leadId: input.leadId, decisionId: input.decisionId },
           input.actorRef,
           "opportunity",
           "OPPORTUNITY_CREATED",
         ),
         randomUUID(),
         input.leadId,
+        input.decisionId,
         input.actorRef,
+        evaluateCommercialDecision,
       ),
     );
   }
@@ -369,7 +524,11 @@ export class CommercialService {
         "transition_opportunity_v1",
         idempotencyKey,
         { opportunityId },
-        { toState: input.toState, reasonCode: input.reasonCode },
+        {
+          toState: input.toState,
+          reasonCode: input.reasonCode,
+          decisionId: input.decisionId,
+        },
         input.actorRef,
         "opportunity",
         "OPPORTUNITY_STATE_TRANSITIONED",
@@ -378,8 +537,10 @@ export class CommercialService {
       opportunityId,
       input.toState,
       input.reasonCode,
+      input.decisionId,
       input.actorRef,
       assertOpportunityTransition,
+      evaluateCommercialDecision,
     );
     if (result.transition != null) {
       this.logger.info(

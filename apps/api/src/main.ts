@@ -4,6 +4,7 @@ import { Redis } from "ioredis";
 
 import {
   checkDatabase,
+  CommercialDecisionRepository,
   CommercialRepository,
   createDatabase,
   FoundationJobRepository,
@@ -33,12 +34,17 @@ const redis = new Redis(config.REDIS_URL, {
 const queue = new BullMqFoundationQueue({ connection: redis });
 const repository = new FoundationJobRepository(database);
 const commercialRepository = new CommercialRepository(database);
+const commercialDecisionRepository = new CommercialDecisionRepository(database);
 const publisher = new BullMqFoundationJobPublisher(queue, repository, logger, {
   retryAfterMs: config.JOB_PUBLISH_RETRY_MS,
   staleAfterMs: config.JOB_STALE_AFTER_MS,
 });
 const service = new FoundationJobService(repository, publisher);
-const commercialService = new CommercialService(commercialRepository, logger);
+const commercialService = new CommercialService(
+  commercialRepository,
+  commercialDecisionRepository,
+  logger,
+);
 const api = await buildApi({
   service,
   commercialService,
