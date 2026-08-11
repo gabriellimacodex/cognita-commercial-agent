@@ -45,3 +45,5 @@ Uma ADR `Accepted` não deve ser alterada materialmente. Criar nova ADR para sub
 | [007](007-eslint-compatibility-baseline-nextjs-16.md) | ESLint Compatibility Baseline for Next.js 16 | Accepted |
 | [008](008-commercial-domain-model-and-lifecycle.md) | Adotar o modelo e o ciclo de vida do domínio comercial | Accepted |
 | [009](009-commercial-audit-idempotency-and-external-identity.md) | Adotar auditoria, idempotência e identidade externa comercial | Accepted |
+| [010](010-commercial-fact-policy-and-decision-model.md) | Adotar o modelo de fatos, políticas e decisões comerciais | Accepted |
+| [011](011-decision-gated-commercial-actions-and-human-authority.md) | Adotar ações comerciais governadas por decisão e autoridade humana | Accepted |
