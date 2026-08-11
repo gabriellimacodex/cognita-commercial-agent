@@ -20,6 +20,10 @@ describe("migrationProvider", () => {
       "011_create_lead_assignments",
       "012_create_commercial_events",
       "013_add_commercial_integrity_indexes_and_immutability",
+      "014_create_commercial_facts",
+      "015_create_commercial_decisions",
+      "016_create_commercial_decision_facts",
+      "017_add_commercial_decision_audit_and_integrity",
     ]);
   });
 });

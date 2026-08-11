@@ -1,4 +1,8 @@
-import { getLeadContext, getLeadTimeline } from "../../lib/commercial-api";
+import {
+  getDecisionContext,
+  getLeadContext,
+  getLeadTimeline,
+} from "../../lib/commercial-api";
 import { runCommercialVerticalSlice } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +24,16 @@ export default async function CommercialPage({
       ? await Promise.all([
           getLeadContext(parameters.organizationId, parameters.leadId),
           getLeadTimeline(parameters.organizationId, parameters.leadId),
+          getDecisionContext(parameters.organizationId, parameters.leadId),
         ]).catch(() => undefined)
       : undefined;
   const context = persisted?.[0];
   const timeline = persisted?.[1];
+  const decisionContext = persisted?.[2];
+  const humanReviewExercised =
+    timeline?.items.some(
+      (event) => event.eventType === "commercial_decision_escalated",
+    ) ?? false;
 
   return (
     <main>
@@ -93,6 +103,13 @@ export default async function CommercialPage({
               Descriptive channel
               <input name="channel" defaultValue="web-form" required />
             </label>
+            <label>
+              Conversion measurement
+              <select name="measuresConversion" defaultValue="true" required>
+                <option value="true">Measured (standard fit)</option>
+                <option value="false">Not measured (human review)</option>
+              </select>
+            </label>
           </div>
           <label htmlFor="messageBody">Inbound text message</label>
           <textarea
@@ -159,6 +176,41 @@ export default async function CommercialPage({
                 </li>
               ))}
             </ol>
+          </section>
+
+          <section
+            data-testid="commercial-decision-context"
+            aria-labelledby="decision-title"
+          >
+            <h2 id="decision-title">Decision context</h2>
+            <dl>
+              <dt>Active Fact keys</dt>
+              <dd data-testid="commercial-active-facts">
+                {decisionContext?.facts.length ?? 0}
+              </dd>
+              <dt>Latest Decision</dt>
+              <dd data-testid="commercial-decision-id">
+                {decisionContext?.latestDecision?.id ?? "not evaluated"}
+              </dd>
+              <dt>Requested action</dt>
+              <dd>
+                {decisionContext?.latestDecision?.requestedAction ?? "none"}
+              </dd>
+              <dt>Outcome</dt>
+              <dd data-testid="commercial-decision-outcome">
+                {decisionContext?.latestDecision?.outcome ?? "none"}
+              </dd>
+              <dt>Human review exercised</dt>
+              <dd data-testid="commercial-human-review">
+                {humanReviewExercised ? "yes" : "no"}
+              </dd>
+              <dt>Policy</dt>
+              <dd>
+                {decisionContext?.latestDecision == null
+                  ? "none"
+                  : `${decisionContext.latestDecision.policyKey}@${decisionContext.latestDecision.policyVersion}`}
+              </dd>
+            </dl>
           </section>
         </>
       ) : null}

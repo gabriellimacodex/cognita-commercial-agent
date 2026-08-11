@@ -1,4 +1,31 @@
-# Contratos de API — Rascunho
+# Contratos de API
+
+## Contratos locais implementados
+
+Os contratos executáveis são definidos e validados em
+`../packages/schemas/src/commercial.ts`. A semântica decisória é canônica nas
+[ADRs 010 e 011](adr/README.md).
+
+O Épico 03 acrescenta os seguintes endpoints locais:
+
+- `POST /commercial/leads/:id/facts`: registra um Fact imutável; requer
+  `Idempotency-Key`.
+- `GET /commercial/leads/:id/facts`: retorna o snapshot ativo determinístico.
+- `POST /commercial/leads/:id/decisions`: avalia uma única ação e persiste o
+  Decision Record; requer `Idempotency-Key`.
+- `GET /commercial/decisions/:id`: consulta um Decision Record.
+- `GET /commercial/leads/:id/decision-context`: consulta Lead, Opportunity,
+  Facts ativos e a Decision mais recente.
+
+`POST /commercial/opportunities` e
+`POST /commercial/opportunities/:id/transitions` exigem uma Decision aplicável,
+atual e ainda não utilizada. Os endpoints permanecem sem autenticação e são
+autorizados somente no ambiente local delimitado pelas ADRs 008 e 011.
+
+## Contratos futuros não implementados
+
+Os contratos abaixo permanecem rascunhos de produto e não descrevem rotas
+disponíveis:
 
 ## POST /v1/events/inbound-message
 

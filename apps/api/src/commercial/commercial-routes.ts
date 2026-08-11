@@ -19,6 +19,11 @@ export function registerCommercialRoutes(
   api.post("/commercial/leads/:id/assignments", handler.assignLead);
   api.get("/commercial/leads/:id/context", handler.getLeadContext);
   api.get("/commercial/leads/:id/timeline", handler.getLeadTimeline);
+  api.post("/commercial/leads/:id/facts", handler.recordFact);
+  api.get("/commercial/leads/:id/facts", handler.listFacts);
+  api.post("/commercial/leads/:id/decisions", handler.evaluateDecision);
+  api.get("/commercial/leads/:id/decision-context", handler.getDecisionContext);
+  api.get("/commercial/decisions/:id", handler.getDecision);
   api.post("/commercial/conversations", handler.createConversation);
   api.get("/commercial/conversations/:id", handler.getConversation);
   api.post("/commercial/conversations/:id/messages", handler.createMessage);

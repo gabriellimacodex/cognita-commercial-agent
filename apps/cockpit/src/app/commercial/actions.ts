@@ -3,7 +3,10 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 
-import { executeCommercialCommand } from "../../lib/commercial-api";
+import {
+  executeCommercialCommand,
+  executeCommercialDecision,
+} from "../../lib/commercial-api";
 
 function required(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -18,6 +21,8 @@ export async function runCommercialVerticalSlice(
 ): Promise<never> {
   const organizationId = randomUUID();
   const actorRef = "local-founder";
+  const measuresConversion =
+    required(formData, "measuresConversion") === "true";
   try {
     await executeCommercialCommand("/commercial/organizations", "POST", {
       organizationId,
@@ -90,10 +95,96 @@ export async function runCommercialVerticalSlice(
         actorRef,
       },
     );
+    const observedAt = new Date().toISOString();
+    const facts = [
+      ["company_ownership_type", "private"],
+      ["has_existing_sales_process", true],
+      ["uses_crm", true],
+      ["seller_count", 3],
+      ["commercial_owner_defined", true],
+      ["has_recurring_inbound", true],
+      ["monthly_lead_volume", 500],
+      ["average_ticket_brl_cents", 500_000],
+      ["measures_conversion", measuresConversion],
+      ["roi_provable_within_90_days", true],
+      ["pain_confirmed", true],
+      ["pain_recurring", true],
+      ["pain_measurable", true],
+    ] as const;
+    for (const [factKey, value] of facts) {
+      const pain = factKey.startsWith("pain_");
+      await executeCommercialCommand(
+        `/commercial/leads/${lead.targetId}/facts`,
+        "POST",
+        {
+          organizationId,
+          factKey,
+          factSchemaVersion: 1,
+          value,
+          sourceType: "human_declaration",
+          sourceRef: actorRef,
+          declarerRef: actorRef,
+          executorRef: actorRef,
+          observedAt,
+          ...(pain
+            ? {
+                evidence: {
+                  type: "human_attestation",
+                  ref: "cockpit-standard-fit",
+                },
+              }
+            : {}),
+        },
+      );
+    }
+    const policyDecision = await executeCommercialDecision(
+      lead.targetId ?? "",
+      {
+        organizationId,
+        requestedAction: "create_opportunity",
+        authorityType: "policy",
+        authorityRef: "opportunity-eligibility@1.0.0",
+        executorRef: actorRef,
+      },
+    );
+    const opportunityDecision =
+      policyDecision.outcome === "require_human_review"
+        ? await executeCommercialDecision(lead.targetId ?? "", {
+            organizationId,
+            requestedAction: "create_opportunity",
+            authorityType: "declared_human",
+            authorityRef: actorRef,
+            executorRef: actorRef,
+            reasonCode: "conversion_measurement_gap",
+            evidence: {
+              type: "human_attestation",
+              ref: "cockpit-human-review",
+            },
+          })
+        : policyDecision;
+    if (opportunityDecision.outcome !== "allow") {
+      throw new Error("Opportunity decision did not authorize the action");
+    }
     const opportunity = await executeCommercialCommand(
       "/commercial/opportunities",
       "POST",
-      { organizationId, leadId: lead.targetId, actorRef },
+      {
+        organizationId,
+        leadId: lead.targetId,
+        decisionId: opportunityDecision.id,
+        actorRef,
+      },
+    );
+    const discoveryDecision = await executeCommercialDecision(
+      lead.targetId ?? "",
+      {
+        organizationId,
+        opportunityId: opportunity.targetId,
+        requestedAction: "transition_to_discovery",
+        authorityType: "policy",
+        authorityRef: "commercial-state-gates@1.0.0",
+        executorRef: actorRef,
+      },
     );
     await executeCommercialCommand(
       `/commercial/opportunities/${opportunity.targetId}/transitions`,
@@ -101,7 +192,8 @@ export async function runCommercialVerticalSlice(
       {
         organizationId,
         toState: "discovery",
-        reasonCode: "vertical_slice_started",
+        reasonCode: "discovery_started",
+        decisionId: discoveryDecision.id,
         actorRef,
       },
     );

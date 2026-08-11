@@ -24,6 +24,7 @@ import {
   InvalidCommercialTransitionError,
 } from "./commercial/commercial-domain.js";
 import { CommercialHandler } from "./commercial/commercial-handler.js";
+import { InvalidCommercialFactError } from "./commercial/commercial-fact-catalog.js";
 import { registerCommercialRoutes } from "./commercial/commercial-routes.js";
 import type { CommercialService } from "./commercial/commercial-service.js";
 
@@ -89,6 +90,12 @@ export async function buildApi(
       return;
     }
     if (error instanceof CommercialConflictError) {
+      if (error.code === "DECISION_STALE") {
+        dependencies.logger.warn(
+          { event: "commercial_decision_stale", requestId: request.id },
+          "Commercial Decision is stale",
+        );
+      }
       await reply.status(409).send({
         error: {
           code: error.code,
@@ -128,6 +135,16 @@ export async function buildApi(
       await reply.status(400).send({
         error: {
           code: "INVALID_CNPJ",
+          message: error.message,
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+    if (error instanceof InvalidCommercialFactError) {
+      await reply.status(400).send({
+        error: {
+          code: "INVALID_COMMERCIAL_FACT",
           message: error.message,
           requestId: request.id,
         },
