@@ -4,7 +4,7 @@
 - **Data:** 2026-08-11
 - **Responsável:** Cognita
 - **Substitui:** nenhuma
-- **Substituída por:** nenhuma
+- **Substituída por:** ADR 015 parcialmente, somente no catálogo fechado de requirement IDs
 
 ## Contexto
 
