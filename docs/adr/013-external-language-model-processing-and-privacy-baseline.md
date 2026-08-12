@@ -1,10 +1,18 @@
 # ADR 013 — External Language Model Processing and Privacy Baseline
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Data:** 2026-08-12
 - **Responsável:** Cognita
 - **Substitui:** nenhuma
 - **Substituída por:** nenhuma
+
+## Decisão humana
+
+Esta ADR foi aceita por decisão humana explícita em 2026-08-12. A baseline
+vigente é `providerId=openai` e `modelId=gpt-5.6-terra`, operado como alias
+governado, com rollout exclusivamente `synthetic-data-only`. A aceitação não
+autoriza dados comerciais reais; esse uso continua condicionado a uma ADR
+futura específica de Privacy & Retention.
 
 ## Contexto
 
@@ -188,7 +196,7 @@ nem comprova ZDR/MAM no Project. Rejeitada.
 
 ## Decisão
 
-Recomendar `ACCEPT` para a decisão humana final, propondo a seguinte baseline:
+Adotar a seguinte baseline:
 
 - `providerId=openai`;
 - `modelId=gpt-5.6-terra`;
@@ -197,10 +205,9 @@ Recomendar `ACCEPT` para a decisão humana final, propondo a seguinte baseline:
 - rollout exclusivamente `synthetic-data-only`.
 
 O benchmark v4 atingiu todos os hard gates, critical recall de 100%, overall
-recall de 100% e timeout real de 20 segundos. Esta recomendação não altera o
-status por si só: a ADR permanece `Proposed` até decisão humana explícita.
-Consequentemente, nenhum adapter real ou implementação do Épico 04 está
-autorizado nesta revisão documental.
+recall de 100% e timeout real de 20 segundos. A decisão humana de 2026-08-12
+aceitou essa recomendação e autorizou separadamente a implementação do Épico 04
+sob esta baseline e as ADRs 010, 011, 012 e 014.
 
 As configurações, limites de privacidade e fronteiras abaixo são a baseline
 proposta para adoção humana, não comportamento já implementado.
@@ -1149,8 +1156,8 @@ check e não poderá persistir Commercial Fact.
 
 ## Consequências negativas
 
-- Nenhum adapter real pode ser implementado antes da decisão humana que altere
-  esta ADR para `Accepted` e autorize plano separado.
+- O adapter real permanece limitado ao plano aprovado e ao rollout
+  `synthetic-data-only`; a aceitação desta ADR não autoriza dados reais.
 - Outputs brutos descartados limitam diagnóstico retrospectivo de offsets.
 - Âncoras excessivamente estritas no evaluator v2 produziram falsos negativos
   conservadores.
@@ -1191,23 +1198,23 @@ check e não poderá persistir Commercial Fact.
 
 ## Adoção
 
-Os gates técnicos para adoção foram satisfeitos pelo benchmark v4. Resta a
-decisão humana explícita que altere o status para `Accepted`, selecione
-`providerId=openai`/`modelId=gpt-5.6-terra` como alias governado e mantenha o
-rollout `synthetic-data-only`. Implementação continua dependente de plano e
-autorização separados.
+Os gates técnicos para adoção foram satisfeitos pelo benchmark v4. A decisão
+humana explícita de 2026-08-12 aceitou
+`providerId=openai`/`modelId=gpt-5.6-terra` como alias governado e manteve o
+rollout `synthetic-data-only`.
 
-Nenhum item desta proposta inicia migrations, rota, repository, adapter,
-Cockpit ou Épico 04.
+A implementação permanece dependente de plano e autorização separados. A
+autorização do Épico 04 foi concedida no mesmo ato decisório, sem ampliar os
+limites de privacidade desta ADR.
 
 ## Reversão
 
-Enquanto `Proposed`, a revisão ou rejeição não exige reversão de produto porque
-nenhuma integração foi autorizada. O benchmark temporário deve ser descartado,
+Antes da adoção, a revisão ou rejeição não exigia reversão de produto porque
+nenhuma integração estava autorizada. O benchmark temporário foi descartado,
 mantendo somente as métricas não sensíveis registradas nesta ADR.
 
-Depois de eventual adoção, contenção consistirá em desabilitar novas chamadas e
-remover a credencial do ambiente, preservando Interpretation Runs e auditoria.
+Depois da adoção, contenção consiste em desabilitar novas chamadas e remover a
+credencial do ambiente, preservando Interpretation Runs e auditoria.
 Nenhum fallback, alias alternativo ou model ID substituto será ativado durante
 rollback.
 
