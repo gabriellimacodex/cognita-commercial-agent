@@ -48,5 +48,5 @@ Uma ADR `Accepted` não deve ser alterada materialmente. Criar nova ADR para sub
 | [010](010-commercial-fact-policy-and-decision-model.md) | Adotar o modelo de fatos, políticas e decisões comerciais | Accepted |
 | [011](011-decision-gated-commercial-actions-and-human-authority.md) | Adotar ações comerciais governadas por decisão e autoridade humana | Accepted |
 | [012](012-commercial-interpretation-boundary-and-candidate-evidence-model.md) | Commercial Interpretation Boundary and Candidate Evidence Model | Accepted |
-| [013](013-external-language-model-processing-and-privacy-baseline.md) | External Language Model Processing and Privacy Baseline | Proposed |
+| [013](013-external-language-model-processing-and-privacy-baseline.md) | External Language Model Processing and Privacy Baseline | Accepted |
 | [014](014-deterministic-evidence-alignment.md) | Deterministic Evidence Alignment for Commercial Interpretation | Accepted |
