@@ -786,6 +786,7 @@ export class CommercialInterpretationRepository {
       .selectFrom("commercialCommands")
       .selectAll()
       .where("organizationId", "=", record.organizationId)
+      .where("commandType", "=", "resolve_commercial_fact_candidate_v1")
       .where("idempotencyKey", "=", record.idempotencyKey)
       .executeTakeFirst();
     if (existing == null) return false;

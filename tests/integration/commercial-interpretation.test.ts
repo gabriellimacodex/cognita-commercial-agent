@@ -237,6 +237,17 @@ describe("Commercial Intelligence vertical slice", () => {
     expect(crossOrganizationConfirmation.statusCode).toBe(404);
 
     const concurrentConfirmationKey = randomUUID();
+    const unrelatedCommandWithSameKey = await command(
+      "/commercial/contacts",
+      {
+        organizationId,
+        name: "Synthetic idempotency namespace",
+        email: "synthetic-idempotency-namespace@example.test",
+        actorRef: "human:synthetic",
+      },
+      concurrentConfirmationKey,
+    );
+    expect(unrelatedCommandWithSameKey.statusCode).toBe(201);
     const concurrentConfirmations = await Promise.all([
       command(
         `/commercial/fact-candidates/${firstCandidate.id}/confirm`,
