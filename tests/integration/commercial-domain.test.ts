@@ -5,6 +5,7 @@ import { sql } from "kysely";
 import { Migrator } from "kysely/migration";
 
 import {
+  CommercialActionPlanRepository,
   CommercialRepository,
   CommercialDecisionRepository,
   createDatabase,
@@ -15,6 +16,7 @@ import { createLogger } from "@cognita/observability";
 import {
   apiErrorSchema,
   commercialCommandReceiptSchema,
+  commercialActionPlanSchema,
   commercialDecisionSchema,
   commercialFactSnapshotSchema,
   commercialTimelineSchema,
@@ -53,6 +55,7 @@ const commercialService = new CommercialService(
   new CommercialRepository(database),
   new CommercialDecisionRepository(database),
   logger,
+  new CommercialActionPlanRepository(database),
 );
 const api = await buildApi({
   service: foundationService,
@@ -1300,6 +1303,352 @@ describe("commercial domain foundation", () => {
     ).rejects.toThrow(/append-only/);
     await expect(
       sql`delete from commercial_events where id = ${event.id}`.execute(
+        database,
+      ),
+    ).rejects.toThrow(/append-only/);
+  });
+
+  it("plans, authorizes and explicitly applies the material-action slice", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    await recordStandardFacts(organizationId, lead.targetId!);
+
+    const planningKey = randomUUID();
+    const planningPayload = {
+      organizationId,
+      executorRef: "integration-test",
+    };
+    const planned = await commercialCommand(
+      "POST",
+      `/commercial/leads/${lead.targetId}/action-plans`,
+      planningPayload,
+      planningKey,
+    );
+    expect(planned.statusCode).toBe(201);
+    const plan = commercialActionPlanSchema.parse(planned.json());
+    expect(plan).toMatchObject({
+      resultType: "candidate",
+      currentness: "current",
+      candidate: {
+        candidateType: "submit_material_action",
+        requestedAction: "create_opportunity",
+      },
+    });
+    const planningReplay = await commercialCommand(
+      "POST",
+      `/commercial/leads/${lead.targetId}/action-plans`,
+      planningPayload,
+      planningKey,
+    );
+    expect(planningReplay.statusCode).toBe(201);
+    expect(commercialActionPlanSchema.parse(planningReplay.json())).toEqual(
+      plan,
+    );
+    const planningConflict = await commercialCommand(
+      "POST",
+      `/commercial/leads/${lead.targetId}/action-plans`,
+      { organizationId, executorRef: "another-executor" },
+      planningKey,
+    );
+    expect(planningConflict.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(planningConflict.json()).error.code).toBe(
+      "COMMERCIAL_IDEMPOTENCY_CONFLICT",
+    );
+
+    const evaluated = await commercialCommand(
+      "POST",
+      `/commercial/action-candidates/${plan.candidate!.id}/decisions`,
+      {
+        organizationId,
+        authorityType: "policy",
+        authorityRef: "opportunity-eligibility@1.0.0",
+        executorRef: "integration-test",
+      },
+    );
+    expect(evaluated.statusCode).toBe(201);
+    const decision = commercialDecisionSchema.parse(evaluated.json());
+    expect(decision).toMatchObject({
+      outcome: "allow",
+      actionCandidateId: plan.candidate!.id,
+    });
+
+    const applicationKey = randomUUID();
+    const firstApplication = await successfulCommand(
+      "POST",
+      `/commercial/action-candidates/${plan.candidate!.id}/applications`,
+      { organizationId, executorRef: "integration-test" },
+      applicationKey,
+    );
+    const replay = await successfulCommand(
+      "POST",
+      `/commercial/action-candidates/${plan.candidate!.id}/applications`,
+      { organizationId, executorRef: "integration-test" },
+      applicationKey,
+    );
+    expect(replay).toEqual(firstApplication);
+
+    const duplicateApplication = await commercialCommand(
+      "POST",
+      `/commercial/action-candidates/${plan.candidate!.id}/applications`,
+      { organizationId, executorRef: "integration-test" },
+    );
+    expect(duplicateApplication.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(duplicateApplication.json()).error.code).toBe(
+      "DECISION_ALREADY_APPLIED",
+    );
+
+    const historical = await api.inject({
+      method: "GET",
+      url: `/commercial/action-plans/${plan.id}?organizationId=${organizationId}`,
+    });
+    expect(commercialActionPlanSchema.parse(historical.json())).toMatchObject({
+      currentness: "historical",
+      decisionId: decision.id,
+    });
+  });
+
+  it("derives the missing-requirement Question Candidate and becomes stale after Fact input changes", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    await recordStandardFacts(organizationId, lead.targetId!);
+    const opportunityDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "create_opportunity",
+    );
+    const opportunity = await successfulCommand(
+      "POST",
+      "/commercial/opportunities",
+      {
+        organizationId,
+        leadId: lead.targetId,
+        decisionId: opportunityDecision.id,
+        actorRef: "test-human",
+      },
+    );
+    const discoveryDecision = await evaluateDecision(
+      organizationId,
+      lead.targetId!,
+      "transition_to_discovery",
+      opportunity.targetId!,
+    );
+    await successfulCommand(
+      "POST",
+      `/commercial/opportunities/${opportunity.targetId}/transitions`,
+      {
+        organizationId,
+        toState: "discovery",
+        reasonCode: "discovery_started",
+        decisionId: discoveryDecision.id,
+        actorRef: "test-human",
+      },
+    );
+    await recordFact(
+      organizationId,
+      lead.targetId!,
+      "decision_maker_access_confirmed",
+      true,
+    );
+    await recordFact(
+      organizationId,
+      lead.targetId!,
+      "operational_capacity_confirmed",
+      true,
+    );
+    await recordFact(
+      organizationId,
+      lead.targetId!,
+      "timing_status",
+      "available_now",
+    );
+
+    const response = await commercialCommand(
+      "POST",
+      `/commercial/leads/${lead.targetId}/action-plans`,
+      { organizationId, executorRef: "integration-test" },
+    );
+    const plan = commercialActionPlanSchema.parse(response.json());
+    expect(plan).toMatchObject({
+      currentness: "current",
+      candidate: {
+        candidateType: "collect_requirement",
+        requirementId: "budget_known",
+      },
+      questionCandidate: {
+        requirementId: "budget_known",
+        text: "O orçamento está confirmado?",
+      },
+    });
+
+    const inadmissible = await commercialCommand(
+      "POST",
+      `/commercial/action-candidates/${plan.candidate!.id}/decisions`,
+      {
+        organizationId,
+        authorityType: "policy",
+        authorityRef: "commercial-state-gates@1.0.0",
+        executorRef: "integration-test",
+      },
+    );
+    expect(inadmissible.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(inadmissible.json()).error.code).toBe(
+      "ACTION_CANDIDATE_NOT_ADMISSIBLE",
+    );
+
+    await recordFact(organizationId, lead.targetId!, "budget_confirmed", true);
+    const stale = await api.inject({
+      method: "GET",
+      url: `/commercial/action-plans/${plan.id}?organizationId=${organizationId}`,
+    });
+    expect(commercialActionPlanSchema.parse(stale.json()).currentness).toBe(
+      "stale",
+    );
+  });
+
+  it("requires declared human authority for a review-exception Candidate", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    await recordStandardFacts(organizationId, lead.targetId!, {
+      measures_conversion: false,
+    });
+    const response = await commercialCommand(
+      "POST",
+      `/commercial/leads/${lead.targetId}/action-plans`,
+      { organizationId, executorRef: "integration-test" },
+    );
+    const plan = commercialActionPlanSchema.parse(response.json());
+    expect(plan.candidate).toMatchObject({
+      candidateType: "request_human_review",
+      requiredCapabilityKey: "review_commercial_exception_v1",
+    });
+
+    const decisionResponse = await commercialCommand(
+      "POST",
+      `/commercial/action-candidates/${plan.candidate!.id}/decisions`,
+      {
+        organizationId,
+        authorityType: "declared_human",
+        authorityRef: "human:test",
+        executorRef: "integration-test",
+        reasonCode: "conversion_measurement_gap",
+        evidence: {
+          type: "human_attestation",
+          ref: "integration-human-review",
+        },
+      },
+    );
+    expect(decisionResponse.statusCode).toBe(201);
+    expect(
+      commercialDecisionSchema.parse(decisionResponse.json()),
+    ).toMatchObject({
+      outcome: "allow",
+      authorityType: "declared_human",
+      actionCandidateId: plan.candidate!.id,
+    });
+  });
+
+  it("refuses a material Candidate after its Fact snapshot changes", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    await recordStandardFacts(organizationId, lead.targetId!);
+    const response = await commercialCommand(
+      "POST",
+      `/commercial/leads/${lead.targetId}/action-plans`,
+      { organizationId, executorRef: "integration-test" },
+    );
+    const plan = commercialActionPlanSchema.parse(response.json());
+    expect(plan.candidate?.candidateType).toBe("submit_material_action");
+
+    await recordFact(
+      organizationId,
+      lead.targetId!,
+      "measures_conversion",
+      true,
+    );
+    const staleDecision = await commercialCommand(
+      "POST",
+      `/commercial/action-candidates/${plan.candidate!.id}/decisions`,
+      {
+        organizationId,
+        authorityType: "policy",
+        authorityRef: "opportunity-eligibility@1.0.0",
+        executorRef: "integration-test",
+      },
+    );
+    expect(staleDecision.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(staleDecision.json()).error.code).toBe(
+      "ACTION_CANDIDATE_STALE",
+    );
+  });
+
+  it("serializes semantic planning and Candidate evaluation under concurrent keys", async () => {
+    const organizationId = await createOrganization();
+    const contact = await createContact(organizationId);
+    const lead = await createLead(organizationId, contact.targetId!);
+    await recordStandardFacts(organizationId, lead.targetId!);
+    const [firstResponse, secondResponse] = await Promise.all([
+      commercialCommand(
+        "POST",
+        `/commercial/leads/${lead.targetId}/action-plans`,
+        { organizationId, executorRef: "integration-test" },
+      ),
+      commercialCommand(
+        "POST",
+        `/commercial/leads/${lead.targetId}/action-plans`,
+        { organizationId, executorRef: "integration-test" },
+      ),
+    ]);
+    const first = commercialActionPlanSchema.parse(firstResponse.json());
+    const second = commercialActionPlanSchema.parse(secondResponse.json());
+    expect(second.id).toBe(first.id);
+    expect(
+      await database
+        .selectFrom("commercialActionCandidates")
+        .select("id")
+        .where("actionPlanId", "=", first.id)
+        .execute(),
+    ).toHaveLength(1);
+
+    const otherOrganizationId = await createOrganization();
+    const crossOrganization = await api.inject({
+      method: "GET",
+      url: `/commercial/action-plans/${first.id}?organizationId=${otherOrganizationId}`,
+    });
+    expect(crossOrganization.statusCode).toBe(404);
+
+    const decisionPayload = {
+      organizationId,
+      authorityType: "policy",
+      authorityRef: "opportunity-eligibility@1.0.0",
+      executorRef: "integration-test",
+    };
+    const evaluations = await Promise.all([
+      commercialCommand(
+        "POST",
+        `/commercial/action-candidates/${first.candidate!.id}/decisions`,
+        decisionPayload,
+      ),
+      commercialCommand(
+        "POST",
+        `/commercial/action-candidates/${first.candidate!.id}/decisions`,
+        decisionPayload,
+      ),
+    ]);
+    expect(evaluations.map(({ statusCode }) => statusCode).sort()).toEqual([
+      201, 409,
+    ]);
+
+    await expect(
+      sql`update commercial_action_plans set executor_ref = 'rewrite' where id = ${first.id}`.execute(
+        database,
+      ),
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      sql`delete from commercial_action_candidates where id = ${first.candidate!.id}`.execute(
         database,
       ),
     ).rejects.toThrow(/append-only/);
