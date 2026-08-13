@@ -2,6 +2,7 @@ import type {
   CommercialDecisionOutcome,
   CommercialFactKey,
   CommercialFactSnapshot,
+  CommercialRequirementId,
   CommercialRequestedAction,
   CreateCommercialDecisionInput,
   Lead,
@@ -228,7 +229,7 @@ export interface DecisionEvaluation {
     action: CommercialRequestedAction;
     reasonCodes: string[];
   }>;
-  missingRequirements: string[];
+  missingRequirements: CommercialRequirementId[];
   requiredEvidence: string[];
   reasonCodes: string[];
   escalationRequired: boolean;
@@ -254,8 +255,43 @@ function snapshotMap(
   return new Map(snapshots.map((snapshot) => [snapshot.factKey, snapshot]));
 }
 
-function orderedUnique(values: string[]): string[] {
+function orderedUnique<T extends string>(values: T[]): T[] {
   return [...new Set(values)].sort();
+}
+
+export const requiredFactRequirementIds = {
+  company_ownership_type: "company_ownership_type_known",
+  has_existing_sales_process: "sales_process_known",
+  uses_crm: "crm_usage_known",
+  seller_count: "sales_capacity_known",
+  commercial_owner_defined: "commercial_owner_known",
+  has_recurring_inbound: "recurring_inbound_known",
+  monthly_lead_volume: "lead_volume_known",
+  average_ticket_brl_cents: "average_ticket_known",
+  measures_conversion: "conversion_measurement_known",
+  roi_provable_within_90_days: "roi_measurement_known",
+  pain_confirmed: "pain_confirmed_with_evidence",
+  pain_recurring: "pain_recurring_with_evidence",
+  pain_measurable: "pain_measurable_with_evidence",
+  decision_maker_access_confirmed: "decision_maker_access_known",
+  budget_confirmed: "budget_known",
+  operational_capacity_confirmed: "operational_capacity_known",
+  timing_status: "timing_known",
+  revisit_at: "nurture_revisit_date_known",
+  nurture_return_condition: "nurture_return_condition_known",
+} as const satisfies Partial<
+  Record<CommercialFactKey, CommercialRequirementId>
+>;
+
+function requirementIdForFact(key: CommercialFactKey): CommercialRequirementId {
+  const requirementId =
+    requiredFactRequirementIds[key as keyof typeof requiredFactRequirementIds];
+  if (requirementId == null) {
+    throw new Error(
+      `Missing canonical requirement ID for required Fact ${key}`,
+    );
+  }
+  return requirementId;
 }
 
 function factValue(
@@ -266,7 +302,7 @@ function factValue(
 ): unknown {
   const snapshot = facts.get(key);
   if (snapshot == null || snapshot.status === "unknown") {
-    missing.push(key);
+    missing.push(requirementIdForFact(key));
     reasons.push("fact_unknown");
     return undefined;
   }
@@ -409,7 +445,7 @@ export function evaluateCommercialDecision(
       ? policies.opportunityEligibility
       : policies.commercialStateGates;
   const facts = snapshotMap(context.facts);
-  const missing: string[] = [];
+  const missing: CommercialRequirementId[] = [];
   const reasons: string[] = [];
   const requiredEvidence: string[] = [];
   const blockingReasons: string[] = [];

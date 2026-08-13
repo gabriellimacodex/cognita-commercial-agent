@@ -1,9 +1,18 @@
 import {
+  getCommercialDecision,
   getDecisionContext,
+  getCommercialInterpretation,
+  getQuestionCandidates,
   getLeadContext,
   getLeadTimeline,
 } from "../../lib/commercial-api";
-import { runCommercialVerticalSlice } from "./actions";
+import {
+  evaluateIntelligenceDecision,
+  interpretSelectedCommercialMessage,
+  prepareCommercialIntelligenceMessage,
+  resolveIntelligenceCandidate,
+  runCommercialVerticalSlice,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +21,14 @@ interface CommercialPageProperties {
     organizationId?: string;
     leadId?: string;
     error?: string;
+    runId?: string;
+    messageId?: string;
+    baselineDecisionId?: string;
   }>;
+}
+
+function evidenceText(message: string, start: number, end: number): string {
+  return Array.from(message).slice(start, end).join("");
 }
 
 export default async function CommercialPage({
@@ -30,10 +46,34 @@ export default async function CommercialPage({
   const context = persisted?.[0];
   const timeline = persisted?.[1];
   const decisionContext = persisted?.[2];
+  const selectedMessage = context?.conversations
+    .flatMap((conversation) => conversation.messages)
+    .find((message) => message.id === parameters.messageId);
   const humanReviewExercised =
     timeline?.items.some(
       (event) => event.eventType === "commercial_decision_escalated",
     ) ?? false;
+  const interpretation =
+    parameters.organizationId != null && parameters.runId != null
+      ? await getCommercialInterpretation(
+          parameters.organizationId,
+          parameters.runId,
+        ).catch(() => undefined)
+      : undefined;
+  const questions =
+    parameters.organizationId != null && parameters.leadId != null
+      ? await getQuestionCandidates(
+          parameters.organizationId,
+          parameters.leadId,
+        ).catch(() => [])
+      : [];
+  const baselineDecision =
+    parameters.organizationId != null && parameters.baselineDecisionId != null
+      ? await getCommercialDecision(
+          parameters.organizationId,
+          parameters.baselineDecisionId,
+        ).catch(() => undefined)
+      : undefined;
 
   return (
     <main>
@@ -124,6 +164,231 @@ export default async function CommercialPage({
         </form>
         {parameters.error ? <p role="alert">{parameters.error}</p> : null}
       </section>
+
+      <section aria-labelledby="intelligence-form-title">
+        <h2 id="intelligence-form-title">Run synthetic intelligence slice</h2>
+        <p>
+          Creates a synthetic Message, persists a run and four non-authoritative
+          Candidates for explicit human review.
+        </p>
+        <form action={prepareCommercialIntelligenceMessage}>
+          <label>
+            Synthetic inbound Message
+            <textarea
+              name="intelligenceMessage"
+              rows={4}
+              required
+              defaultValue="Hoje entram uns 800 leads por mês, temos quatro vendedores e usamos HubSpot, mas não conseguimos medir direito quantos viram reunião."
+            />
+          </label>
+          <button type="submit">Create synthetic Message</button>
+        </form>
+      </section>
+
+      {selectedMessage != null && interpretation == null ? (
+        <section
+          data-testid="selected-commercial-message"
+          aria-labelledby="selected-message-title"
+        >
+          <h2 id="selected-message-title">Selected Message</h2>
+          <p>{selectedMessage.body}</p>
+          <code>{selectedMessage.id}</code>
+          <form action={interpretSelectedCommercialMessage}>
+            <input
+              type="hidden"
+              name="organizationId"
+              value={parameters.organizationId}
+            />
+            <input type="hidden" name="leadId" value={parameters.leadId} />
+            <input type="hidden" name="messageId" value={selectedMessage.id} />
+            <button type="submit">Interpret selected Message</button>
+          </form>
+        </section>
+      ) : null}
+
+      {interpretation ? (
+        <section
+          data-testid="commercial-interpretation"
+          aria-labelledby="interpretation-title"
+        >
+          <h2 id="interpretation-title">Interpretation and Candidate review</h2>
+          <dl>
+            <dt>Run</dt>
+            <dd>{interpretation.id}</dd>
+            <dt>Status</dt>
+            <dd data-testid="interpretation-status">{interpretation.status}</dd>
+            <dt>Provider baseline</dt>
+            <dd>
+              {interpretation.providerId}/{interpretation.modelId}
+            </dd>
+            <dt>Instruction</dt>
+            <dd>
+              {interpretation.instructionKey}@
+              {interpretation.instructionVersion} ·{" "}
+              {interpretation.instructionDigest}
+            </dd>
+          </dl>
+          <ol className="timeline">
+            {interpretation.candidates.map((candidate) => {
+              const activeFactIds =
+                decisionContext?.facts
+                  .find((snapshot) => snapshot.factKey === candidate.factKey)
+                  ?.facts.map((fact) => fact.id) ?? [];
+              return (
+                <li key={candidate.id} data-testid="fact-candidate">
+                  <strong>
+                    {candidate.factKey}: {String(candidate.proposedValue)}
+                  </strong>
+                  <span>{candidate.status}</span>
+                  {candidate.evidence ? (
+                    <code>
+                      Evidence [{candidate.evidence.startOffset},{" "}
+                      {candidate.evidence.endOffset}) ·{" "}
+                      {candidate.evidence.spanDigest}
+                    </code>
+                  ) : null}
+                  {candidate.evidence != null && selectedMessage != null ? (
+                    <p>
+                      Evidence:{" "}
+                      <mark data-testid="evidence-highlight">
+                        {evidenceText(
+                          selectedMessage.body,
+                          candidate.evidence.startOffset,
+                          candidate.evidence.endOffset,
+                        )}
+                      </mark>
+                    </p>
+                  ) : null}
+                  {candidate.status === "pending_confirmation" ? (
+                    <form
+                      action={resolveIntelligenceCandidate}
+                      className="inline-actions"
+                    >
+                      <input
+                        type="hidden"
+                        name="organizationId"
+                        value={parameters.organizationId}
+                      />
+                      <input
+                        type="hidden"
+                        name="leadId"
+                        value={parameters.leadId}
+                      />
+                      <input
+                        type="hidden"
+                        name="messageId"
+                        value={parameters.messageId}
+                      />
+                      <input
+                        type="hidden"
+                        name="runId"
+                        value={interpretation.id}
+                      />
+                      <input
+                        type="hidden"
+                        name="candidateId"
+                        value={candidate.id}
+                      />
+                      <input
+                        type="hidden"
+                        name="baselineDecisionId"
+                        value={parameters.baselineDecisionId}
+                      />
+                      <label>
+                        Confirmation mode
+                        <select name="confirmationMode" defaultValue="assert">
+                          <option value="assert">Assert</option>
+                          <option
+                            value="correct"
+                            disabled={activeFactIds.length === 0}
+                          >
+                            Correct complete active set
+                          </option>
+                        </select>
+                      </label>
+                      {activeFactIds.map((factId) => (
+                        <label key={factId}>
+                          <input
+                            type="checkbox"
+                            name="correctsFactIds"
+                            value={factId}
+                          />
+                          Correct Fact {factId}
+                        </label>
+                      ))}
+                      <button type="submit" name="resolution" value="confirm">
+                        Confirm as Fact
+                      </button>
+                      <button type="submit" name="resolution" value="reject">
+                        Reject
+                      </button>
+                    </form>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+          <form action={evaluateIntelligenceDecision}>
+            <input
+              type="hidden"
+              name="organizationId"
+              value={parameters.organizationId}
+            />
+            <input type="hidden" name="leadId" value={parameters.leadId} />
+            <input
+              type="hidden"
+              name="messageId"
+              value={parameters.messageId}
+            />
+            <input type="hidden" name="runId" value={interpretation.id} />
+            <input
+              type="hidden"
+              name="baselineDecisionId"
+              value={parameters.baselineDecisionId}
+            />
+            <button type="submit">Evaluate reviewed Decision context</button>
+          </form>
+        </section>
+      ) : null}
+
+      {baselineDecision != null ? (
+        <section
+          data-testid="missing-requirements-comparison"
+          aria-labelledby="missing-comparison-title"
+        >
+          <h2 id="missing-comparison-title">Missing requirements comparison</h2>
+          <p>
+            Before review:{" "}
+            <span data-testid="missing-before">
+              {baselineDecision.missingRequirements.join(", ") || "none"}
+            </span>
+          </p>
+          <p>
+            Current Decision:{" "}
+            <span data-testid="missing-after">
+              {decisionContext?.latestDecision?.missingRequirements.join(
+                ", ",
+              ) || "none"}
+            </span>
+          </p>
+        </section>
+      ) : null}
+
+      {questions.length > 0 ? (
+        <section
+          data-testid="question-candidates"
+          aria-labelledby="questions-title"
+        >
+          <h2 id="questions-title">Deterministic Question Candidates</h2>
+          <ul>
+            {questions.map((question) => (
+              <li key={question.requirementId}>
+                {question.text} <code>{question.requirementId}</code>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {context ? (
         <>
