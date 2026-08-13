@@ -12,6 +12,7 @@ import type {
 import {
   evaluateCommercialDecision,
   policies,
+  requiredFactRequirementIds,
 } from "./commercial-decision-engine.js";
 
 function fact(
@@ -78,6 +79,18 @@ function standardFacts(): CommercialFactSnapshot[] {
   ];
 }
 
+function completeFacts(): CommercialFactSnapshot[] {
+  return [
+    ...standardFacts(),
+    fact("decision_maker_access_confirmed", true),
+    fact("budget_confirmed", true),
+    fact("operational_capacity_confirmed", true),
+    fact("timing_status", "available_now"),
+    fact("revisit_at", "2026-12-01T12:00:00.000Z"),
+    fact("nurture_return_condition", "timing_window_opens"),
+  ];
+}
+
 const policyInput: CreateCommercialDecisionInput = {
   organizationId: "00000000-0000-4000-8000-000000000001",
   requestedAction: "create_opportunity",
@@ -141,8 +154,171 @@ describe("Commercial Decision Engine policy v1 golden cases", () => {
       standardFacts().filter((item) => item.factKey !== "measures_conversion"),
     );
     expect(result.outcome).toBe("require_information");
-    expect(result.missingRequirements).toContain("measures_conversion");
+    expect(result.missingRequirements).toContain(
+      "conversion_measurement_known",
+    );
     expect(result.reasonCodes).toContain("fact_unknown");
+  });
+
+  it("uses the canonical requirement ID for missing company ownership", () => {
+    const result = evaluate(
+      standardFacts().filter(
+        (item) => item.factKey !== "company_ownership_type",
+      ),
+    );
+
+    expect(result.outcome).toBe("require_information");
+    expect(result.missingRequirements).toContain(
+      "company_ownership_type_known",
+    );
+    expect(result.missingRequirements).not.toContain("company_ownership_type");
+  });
+
+  it("defines an explicit canonical requirement for every required Fact", () => {
+    expect(requiredFactRequirementIds).toEqual({
+      company_ownership_type: "company_ownership_type_known",
+      has_existing_sales_process: "sales_process_known",
+      uses_crm: "crm_usage_known",
+      seller_count: "sales_capacity_known",
+      commercial_owner_defined: "commercial_owner_known",
+      has_recurring_inbound: "recurring_inbound_known",
+      monthly_lead_volume: "lead_volume_known",
+      average_ticket_brl_cents: "average_ticket_known",
+      measures_conversion: "conversion_measurement_known",
+      roi_provable_within_90_days: "roi_measurement_known",
+      pain_confirmed: "pain_confirmed_with_evidence",
+      pain_recurring: "pain_recurring_with_evidence",
+      pain_measurable: "pain_measurable_with_evidence",
+      decision_maker_access_confirmed: "decision_maker_access_known",
+      budget_confirmed: "budget_known",
+      operational_capacity_confirmed: "operational_capacity_known",
+      timing_status: "timing_known",
+      revisit_at: "nurture_revisit_date_known",
+      nurture_return_condition: "nurture_return_condition_known",
+    });
+    expect(requiredFactRequirementIds).not.toHaveProperty("sales_cycle_days");
+  });
+
+  it.each([
+    [
+      "company_ownership_type",
+      "company_ownership_type_known",
+      "create_opportunity",
+    ],
+    ["has_existing_sales_process", "sales_process_known", "create_opportunity"],
+    ["uses_crm", "crm_usage_known", "create_opportunity"],
+    ["seller_count", "sales_capacity_known", "create_opportunity"],
+    [
+      "commercial_owner_defined",
+      "commercial_owner_known",
+      "create_opportunity",
+    ],
+    ["has_recurring_inbound", "recurring_inbound_known", "create_opportunity"],
+    ["monthly_lead_volume", "lead_volume_known", "create_opportunity"],
+    ["average_ticket_brl_cents", "average_ticket_known", "create_opportunity"],
+    [
+      "measures_conversion",
+      "conversion_measurement_known",
+      "create_opportunity",
+    ],
+    [
+      "roi_provable_within_90_days",
+      "roi_measurement_known",
+      "create_opportunity",
+    ],
+    ["pain_confirmed", "pain_confirmed_with_evidence", "create_opportunity"],
+    ["pain_recurring", "pain_recurring_with_evidence", "create_opportunity"],
+    ["pain_measurable", "pain_measurable_with_evidence", "create_opportunity"],
+    [
+      "decision_maker_access_confirmed",
+      "decision_maker_access_known",
+      "transition_to_qualified",
+    ],
+    ["budget_confirmed", "budget_known", "transition_to_qualified"],
+    [
+      "operational_capacity_confirmed",
+      "operational_capacity_known",
+      "transition_to_qualified",
+    ],
+    ["timing_status", "timing_known", "transition_to_qualified"],
+    ["revisit_at", "nurture_revisit_date_known", "transition_to_nurture"],
+    [
+      "nurture_return_condition",
+      "nurture_return_condition_known",
+      "transition_to_nurture",
+    ],
+  ] as const)(
+    "maps absent %s to %s and removes it when present",
+    (factKey, requirementId, action) => {
+      const allFacts = completeFacts().map((snapshot) =>
+        action === "transition_to_nurture" &&
+        snapshot.factKey === "timing_status"
+          ? fact("timing_status", "temporarily_unavailable")
+          : snapshot,
+      );
+      const input: CreateCommercialDecisionInput = {
+        organizationId: policyInput.organizationId,
+        requestedAction: action,
+        authorityType: "policy",
+        authorityRef:
+          action === "create_opportunity"
+            ? "opportunity-eligibility@1.0.0"
+            : "commercial-state-gates@1.0.0",
+        executorRef: "test",
+        ...(action === "create_opportunity"
+          ? {}
+          : { opportunityId: "00000000-0000-4000-8000-000000000004" }),
+      };
+      const context = {
+        lead: {
+          id: "00000000-0000-4000-8000-000000000002",
+          organizationId: input.organizationId,
+          contactId: "00000000-0000-4000-8000-000000000003",
+          companyId: null,
+          source: "test",
+          status: "open" as const,
+          externalNamespace: null,
+          externalId: null,
+          closedAt: null,
+          convertedAt: null,
+          createdAt: "2026-08-11T12:00:00.000Z",
+          updatedAt: "2026-08-11T12:00:00.000Z",
+        },
+        contactHasChannel: true,
+        opportunity:
+          action === "create_opportunity"
+            ? null
+            : {
+                id: "00000000-0000-4000-8000-000000000004",
+                organizationId: input.organizationId,
+                leadId: "00000000-0000-4000-8000-000000000002",
+                commercialState:
+                  action === "transition_to_qualified"
+                    ? ("discovery" as const)
+                    : ("open" as const),
+                lastTransitionReasonCode: null,
+                createdAt: "2026-08-11T12:00:00.000Z",
+                updatedAt: "2026-08-11T12:00:00.000Z",
+              },
+        facts: allFacts,
+        now: "2026-08-11T12:00:00.000Z",
+      };
+      const absent = evaluateCommercialDecision(input, {
+        ...context,
+        facts: allFacts.filter((snapshot) => snapshot.factKey !== factKey),
+      });
+      const present = evaluateCommercialDecision(input, context);
+      expect(absent.missingRequirements).toContain(requirementId);
+      expect(present.missingRequirements).not.toContain(requirementId);
+    },
+  );
+
+  it("does not treat absent sales_cycle_days as a missing requirement", () => {
+    const result = evaluate(standardFacts());
+    expect(result.missingRequirements).not.toContain(
+      "sales_cycle_days" as never,
+    );
+    expect(result.outcome).toBe("allow");
   });
 
   it("treats a missing contact channel as information required", () => {

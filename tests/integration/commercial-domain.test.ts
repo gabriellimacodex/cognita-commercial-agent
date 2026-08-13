@@ -283,6 +283,15 @@ describe("commercial domain foundation", () => {
     await database.destroy();
   });
 
+  it("does not expose intelligence routes without the interpretation capability", async () => {
+    const response = await api.inject({
+      method: "GET",
+      url: `/commercial/interpretations/${randomUUID()}?organizationId=${randomUUID()}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
   it("persists the synchronous vertical slice, consolidated context and timeline", async () => {
     const organizationId = await createOrganization();
     const company = await successfulCommand("POST", "/commercial/companies", {
@@ -499,7 +508,7 @@ describe("commercial domain foundation", () => {
       ]),
     );
     expect(decisionRow.missingRequirements).toEqual(
-      expect.arrayContaining(["has_existing_sales_process"]),
+      expect.arrayContaining(["sales_process_known"]),
     );
     expect(decisionRow.requiredEvidence).toEqual([]);
     expect(decisionRow.reasonCodes).toEqual(

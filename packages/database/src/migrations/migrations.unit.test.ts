@@ -24,6 +24,9 @@ describe("migrationProvider", () => {
       "015_create_commercial_decisions",
       "016_create_commercial_decision_facts",
       "017_add_commercial_decision_audit_and_integrity",
+      "018_create_commercial_interpretation_runs",
+      "019_create_commercial_fact_candidates_and_evidence",
+      "020_create_commercial_candidate_resolutions",
     ]);
   });
 });
