@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  type CommercialActionPlanRepository,
+  CommercialConflictError,
+  CommercialInvariantError,
   type CommercialDecisionRepository,
   CommercialNotFoundError,
   type CommandResult,
@@ -9,7 +12,9 @@ import {
 } from "@cognita/database";
 import type { Logger } from "@cognita/observability";
 import type {
+  ApplyCommercialActionCandidateInput,
   AssignLeadInput,
+  CommercialActionPlan,
   CommercialDecision,
   CommercialDecisionContext,
   CommercialFactSnapshot,
@@ -19,6 +24,7 @@ import type {
   Conversation,
   CreateCompanyInput,
   CreateCommercialDecisionInput,
+  CreateCommercialActionPlanInput,
   CreateCommercialFactInput,
   CreateContactInput,
   CreateConversationInput,
@@ -26,6 +32,7 @@ import type {
   CreateMessageInput,
   CreateOpportunityInput,
   CreateOrganizationInput,
+  EvaluateCommercialActionCandidateInput,
   Lead,
   LeadContext,
   LinkContactCompanyInput,
@@ -46,6 +53,8 @@ import {
 } from "./commercial-domain.js";
 import { evaluateCommercialDecision } from "./commercial-decision-engine.js";
 import { validateCommercialFact } from "./commercial-fact-catalog.js";
+import { planCommercialAction } from "./commercial-action-planner.js";
+import { actionQuestionCandidate } from "./commercial-question-candidates.js";
 
 function command(
   organizationId: string,
@@ -80,7 +89,166 @@ export class CommercialService {
     private readonly repository: CommercialRepository,
     private readonly decisionRepository: CommercialDecisionRepository,
     private readonly logger: Logger,
+    private readonly actionPlanRepository?: CommercialActionPlanRepository,
   ) {}
+
+  private requireActionPlanRepository(): CommercialActionPlanRepository {
+    if (this.actionPlanRepository == null) {
+      throw new CommercialInvariantError(
+        "ACTION_PLANNER_UNAVAILABLE",
+        "Commercial Action Planner repository is not configured",
+      );
+    }
+    return this.actionPlanRepository;
+  }
+
+  public async planAction(
+    leadId: string,
+    input: CreateCommercialActionPlanInput,
+    idempotencyKey: string,
+  ): Promise<CommercialActionPlan> {
+    const repository = this.requireActionPlanRepository();
+    const result = await repository.createPlan(
+      command(
+        input.organizationId,
+        "plan_commercial_action_v1",
+        idempotencyKey,
+        { leadId },
+        { executorRef: input.executorRef },
+        input.executorRef,
+        "commercial_action_plan",
+        "COMMERCIAL_ACTION_PLAN_CREATED",
+      ),
+      leadId,
+      input.executorRef,
+      planCommercialAction,
+    );
+    this.report(result);
+    if (result.receipt.targetId == null) {
+      throw new CommercialInvariantError(
+        "ACTION_PLAN_TARGET_MISSING",
+        "Action Plan command did not return its target",
+      );
+    }
+    return this.getActionPlan(input.organizationId, result.receipt.targetId);
+  }
+
+  public async getActionPlan(
+    organizationId: string,
+    actionPlanId: string,
+  ): Promise<CommercialActionPlan> {
+    const plan = await this.requireActionPlanRepository().findPlan(
+      organizationId,
+      actionPlanId,
+      planCommercialAction,
+    );
+    if (plan == null) throw new CommercialNotFoundError("Action Plan");
+    return {
+      ...plan,
+      questionCandidate:
+        plan.candidate?.candidateType === "collect_requirement" &&
+        plan.candidate.requirementId != null
+          ? actionQuestionCandidate(
+              plan.candidate.requirementId,
+              plan.candidate.id,
+              plan.id,
+            )
+          : null,
+    };
+  }
+
+  public async evaluateActionCandidate(
+    candidateId: string,
+    input: EvaluateCommercialActionCandidateInput,
+    idempotencyKey: string,
+  ): Promise<CommercialDecision> {
+    const result =
+      await this.decisionRepository.createDecisionFromActionCandidate(
+        command(
+          input.organizationId,
+          "evaluate_commercial_action_candidate_v1",
+          idempotencyKey,
+          { candidateId },
+          input,
+          input.executorRef,
+          "commercial_decision",
+          "COMMERCIAL_DECISION_EVALUATED",
+        ),
+        candidateId,
+        input,
+        evaluateCommercialDecision,
+        planCommercialAction,
+      );
+    this.report(result);
+    const decision =
+      result.receipt.targetId == null
+        ? undefined
+        : await this.decisionRepository.findDecision(
+            input.organizationId,
+            result.receipt.targetId,
+          );
+    if (decision == null) throw new CommercialNotFoundError("Decision");
+    return decision;
+  }
+
+  public async applyActionCandidate(
+    candidateId: string,
+    input: ApplyCommercialActionCandidateInput,
+    idempotencyKey: string,
+  ): Promise<CommandResult> {
+    const { candidate, decision } =
+      await this.requireActionPlanRepository().findCandidateDecision(
+        input.organizationId,
+        candidateId,
+      );
+    if (
+      decision == null ||
+      decision.actionCandidateId !== candidate.id ||
+      decision.leadId !== candidate.leadId ||
+      decision.opportunityId !== candidate.opportunityId ||
+      decision.requestedAction !== candidate.requestedAction
+    ) {
+      throw new CommercialConflictError(
+        "ACTION_CANDIDATE_DECISION_MISSING",
+        "Action Candidate has no matching Commercial Decision",
+      );
+    }
+    if (decision.outcome !== "allow") {
+      throw new CommercialConflictError(
+        "ACTION_CANDIDATE_DECISION_NOT_ALLOWED",
+        "Action Candidate Decision does not authorize a material effect",
+      );
+    }
+    if (candidate.requestedAction === "create_opportunity") {
+      return this.createOpportunity(
+        {
+          organizationId: input.organizationId,
+          leadId: candidate.leadId,
+          decisionId: decision.id,
+          actorRef: input.executorRef,
+        },
+        idempotencyKey,
+      );
+    }
+    const toState =
+      candidate.requestedAction === "transition_to_discovery"
+        ? "discovery"
+        : "qualified";
+    return this.transitionOpportunity(
+      candidate.opportunityId!,
+      {
+        organizationId: input.organizationId,
+        toState,
+        reasonCode:
+          toState === "discovery"
+            ? "discovery_started"
+            : "human_qualification_confirmed",
+        decisionId: decision.id,
+        actorRef: input.executorRef,
+      },
+      idempotencyKey,
+    );
+  }
 
   public async recordFact(
     leadId: string,

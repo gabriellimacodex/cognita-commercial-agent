@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyCommercialActionCandidateInputSchema,
   createCompanyInputSchema,
   createCommercialDecisionInputSchema,
+  createCommercialActionPlanInputSchema,
   createContactInputSchema,
   createLeadInputSchema,
   createMessageInputSchema,
   opportunityStateSchema,
+  evaluateCommercialActionCandidateInputSchema,
   transitionOpportunityInputSchema,
 } from "./commercial.js";
 
@@ -125,6 +128,49 @@ describe("commercial contracts", () => {
         reasonCode: "other_human_confirmed",
         decisionId,
         actorRef: "human:founder",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps Action Plan and application inputs declarative", () => {
+    expect(
+      createCommercialActionPlanInputSchema.safeParse({
+        organizationId,
+        executorRef: "cockpit-local",
+      }).success,
+    ).toBe(true);
+    expect(
+      createCommercialActionPlanInputSchema.safeParse({
+        organizationId,
+        executorRef: "cockpit-local",
+        objective: "arbitrary-objective",
+      }).success,
+    ).toBe(false);
+    expect(
+      applyCommercialActionCandidateInputSchema.safeParse({
+        organizationId,
+        executorRef: "cockpit-local",
+        requestedAction: "transition_to_won",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("separates policy authority from declared human evidence for Candidate evaluation", () => {
+    expect(
+      evaluateCommercialActionCandidateInputSchema.safeParse({
+        organizationId,
+        authorityType: "policy",
+        authorityRef: "opportunity-eligibility@1.0.0",
+        executorRef: "test",
+        evidence: { type: "human_attestation", ref: "invalid" },
+      }).success,
+    ).toBe(false);
+    expect(
+      evaluateCommercialActionCandidateInputSchema.safeParse({
+        organizationId,
+        authorityType: "declared_human",
+        authorityRef: "human:founder",
+        executorRef: "test",
       }).success,
     ).toBe(false);
   });

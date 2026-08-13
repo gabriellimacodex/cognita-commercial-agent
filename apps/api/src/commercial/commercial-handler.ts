@@ -3,6 +3,8 @@ import { z, type ZodType } from "zod";
 
 import {
   assignLeadInputSchema,
+  applyCommercialActionCandidateInputSchema,
+  commercialActionPlanSchema,
   commercialCommandReceiptSchema,
   commercialDecisionContextSchema,
   commercialDecisionSchema,
@@ -16,6 +18,7 @@ import {
   conversationSchema,
   createCompanyInputSchema,
   createCommercialDecisionInputSchema,
+  createCommercialActionPlanInputSchema,
   createCommercialFactInputSchema,
   createContactInputSchema,
   createConversationInputSchema,
@@ -33,6 +36,7 @@ import {
   startInterpretationInputSchema,
   confirmFactCandidateInputSchema,
   rejectFactCandidateInputSchema,
+  evaluateCommercialActionCandidateInputSchema,
 } from "@cognita/schemas";
 
 import type { CommercialService } from "./commercial-service.js";
@@ -269,6 +273,93 @@ export class CommercialHandler {
       parsed.idempotencyKey,
     );
     await reply.status(201).send(commercialDecisionSchema.parse(result));
+  };
+
+  public planAction = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const parsed = parseCommand(
+      request,
+      reply,
+      createCommercialActionPlanInputSchema,
+    );
+    if (id == null || parsed == null) return;
+    await reply
+      .status(201)
+      .send(
+        commercialActionPlanSchema.parse(
+          await this.service.planAction(
+            id,
+            parsed.input,
+            parsed.idempotencyKey,
+          ),
+        ),
+      );
+  };
+
+  public getActionPlan = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const query = organizationQuerySchema.safeParse(request.query);
+    if (id == null || !query.success) {
+      if (!query.success)
+        validationError(request, reply, "INVALID_ORGANIZATION_QUERY");
+      return;
+    }
+    await reply.send(
+      commercialActionPlanSchema.parse(
+        await this.service.getActionPlan(query.data.organizationId, id),
+      ),
+    );
+  };
+
+  public evaluateActionCandidate = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const parsed = parseCommand(
+      request,
+      reply,
+      evaluateCommercialActionCandidateInputSchema,
+    );
+    if (id == null || parsed == null) return;
+    await reply
+      .status(201)
+      .send(
+        commercialDecisionSchema.parse(
+          await this.service.evaluateActionCandidate(
+            id,
+            parsed.input,
+            parsed.idempotencyKey,
+          ),
+        ),
+      );
+  };
+
+  public applyActionCandidate = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const parsed = parseCommand(
+      request,
+      reply,
+      applyCommercialActionCandidateInputSchema,
+    );
+    if (id == null || parsed == null) return;
+    const result = await this.service.applyActionCandidate(
+      id,
+      parsed.input,
+      parsed.idempotencyKey,
+    );
+    await reply
+      .status(result.receipt.httpStatus)
+      .send(commercialCommandReceiptSchema.parse(result.receipt));
   };
 
   public createCompany = async (

@@ -36,6 +36,7 @@ export const commercialEventTypeSchema = z.enum([
   "commercial_fact_candidate_created",
   "commercial_fact_candidate_confirmed",
   "commercial_fact_candidate_rejected",
+  "commercial_action_plan_created",
 ]);
 
 const actorRefSchema = z.string().trim().min(1).max(160);
@@ -112,6 +113,35 @@ export const commercialRequirementIdSchema = z.enum([
   "terminal_evidence_present",
   "decision_input_is_current",
   "decision_has_not_been_applied",
+]);
+
+export const commercialActionPlanResultSchema = z.enum([
+  "candidate",
+  "no_action",
+]);
+export const commercialActionCandidateTypeSchema = z.enum([
+  "collect_requirement",
+  "request_human_review",
+  "submit_material_action",
+]);
+export const commercialActionCapabilitySchema = z.enum([
+  "collect_commercial_requirement_v1",
+  "resolve_commercial_fact_conflict_v1",
+  "review_commercial_exception_v1",
+  "submit_commercial_decision_v1",
+]);
+export const commercialActionRationaleCodeSchema = z.enum([
+  "planner_scope_not_supported",
+  "policy_blocked",
+  "missing_requirement_selected",
+  "fact_conflict_requires_resolution",
+  "human_review_required",
+  "material_action_ready",
+]);
+export const commercialActionPlanCurrentnessSchema = z.enum([
+  "current",
+  "stale",
+  "historical",
 ]);
 
 export const commercialAuthorityTypeSchema = z.enum([
@@ -301,6 +331,51 @@ export const createCommercialDecisionInputSchema = z
       });
     }
   });
+
+export const createCommercialActionPlanInputSchema = z
+  .object({
+    organizationId: organizationIdSchema,
+    executorRef: actorRefSchema,
+  })
+  .strict();
+
+export const evaluateCommercialActionCandidateInputSchema = z
+  .object({
+    organizationId: organizationIdSchema,
+    authorityType: commercialAuthorityTypeSchema.default("policy"),
+    authorityRef: actorRefSchema,
+    executorRef: actorRefSchema,
+    reasonCode: commercialHumanReasonCodeSchema.optional(),
+    evidence: commercialEvidenceSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.authorityType === "policy" &&
+      (value.reasonCode != null || value.evidence != null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Policy authority cannot carry human reason or evidence",
+      });
+    }
+    if (
+      value.authorityType === "declared_human" &&
+      (value.reasonCode == null || value.evidence == null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Declared human authority requires reason and evidence",
+      });
+    }
+  });
+
+export const applyCommercialActionCandidateInputSchema = z
+  .object({
+    organizationId: organizationIdSchema,
+    executorRef: actorRefSchema,
+  })
+  .strict();
 
 const optionalTextSchema = z.string().trim().min(1).max(255).optional();
 const externalIdentityFields = {
@@ -731,7 +806,64 @@ export const commercialDecisionSchema = z.object({
   humanEvidence: commercialEvidenceSchema.nullable(),
   factIds: z.array(z.uuid()),
   appliedAt: z.iso.datetime().nullable(),
+  actionCandidateId: z.uuid().nullable(),
   recordedAt: z.iso.datetime(),
+});
+
+const versionedArtifactSchema = z.object({
+  key: z.string().trim().min(1),
+  version: z.string().trim().min(1),
+  digest: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+export const commercialActionCandidateSchema = z.object({
+  id: z.uuid(),
+  organizationId: z.uuid(),
+  leadId: z.uuid(),
+  opportunityId: z.uuid().nullable(),
+  actionPlanId: z.uuid(),
+  candidateType: commercialActionCandidateTypeSchema,
+  requestedAction: z.enum([
+    "create_opportunity",
+    "transition_to_discovery",
+    "transition_to_qualified",
+  ]),
+  requirementId: commercialRequirementIdSchema.nullable(),
+  requiredCapabilityKey: commercialActionCapabilitySchema,
+  decisionBasisFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  rationaleCodes: z.array(commercialActionRationaleCodeSchema),
+  decisionReasonCodes: z.array(z.string()),
+  recordedAt: z.iso.datetime(),
+});
+
+export const commercialActionQuestionCandidateSchema = z.object({
+  requirementId: commercialRequirementIdSchema,
+  templateKey: z.string(),
+  templateVersion: z.literal("1.0.0"),
+  text: z.string(),
+  actionCandidateId: z.uuid(),
+  actionPlanId: z.uuid(),
+});
+
+export const commercialActionPlanSchema = z.object({
+  id: z.uuid(),
+  organizationId: z.uuid(),
+  leadId: z.uuid(),
+  opportunityId: z.uuid().nullable(),
+  objective: versionedArtifactSchema,
+  planner: versionedArtifactSchema,
+  actionCatalog: versionedArtifactSchema,
+  requirementPriority: versionedArtifactSchema,
+  inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  outputDigest: z.string().regex(/^[0-9a-f]{64}$/),
+  resultType: commercialActionPlanResultSchema,
+  rationaleCodes: z.array(commercialActionRationaleCodeSchema),
+  executorRef: z.string(),
+  recordedAt: z.iso.datetime(),
+  currentness: commercialActionPlanCurrentnessSchema,
+  candidate: commercialActionCandidateSchema.nullable(),
+  decisionId: z.uuid().nullable(),
+  questionCandidate: commercialActionQuestionCandidateSchema.nullable(),
 });
 
 const timestampsSchema = z.object({
@@ -882,6 +1014,21 @@ export type CommercialDecisionOutcome = z.infer<
 export type CommercialRequirementId = z.infer<
   typeof commercialRequirementIdSchema
 >;
+export type CommercialActionPlanResult = z.infer<
+  typeof commercialActionPlanResultSchema
+>;
+export type CommercialActionCandidateType = z.infer<
+  typeof commercialActionCandidateTypeSchema
+>;
+export type CommercialActionCapability = z.infer<
+  typeof commercialActionCapabilitySchema
+>;
+export type CommercialActionRationaleCode = z.infer<
+  typeof commercialActionRationaleCodeSchema
+>;
+export type CommercialActionPlanCurrentness = z.infer<
+  typeof commercialActionPlanCurrentnessSchema
+>;
 export type CommercialAuthorityType = z.infer<
   typeof commercialAuthorityTypeSchema
 >;
@@ -894,6 +1041,15 @@ export type CreateCommercialFactInput = z.infer<
 >;
 export type CreateCommercialDecisionInput = z.infer<
   typeof createCommercialDecisionInputSchema
+>;
+export type CreateCommercialActionPlanInput = z.infer<
+  typeof createCommercialActionPlanInputSchema
+>;
+export type EvaluateCommercialActionCandidateInput = z.infer<
+  typeof evaluateCommercialActionCandidateInputSchema
+>;
+export type ApplyCommercialActionCandidateInput = z.infer<
+  typeof applyCommercialActionCandidateInputSchema
 >;
 export type CreateOrganizationInput = z.infer<
   typeof createOrganizationInputSchema
@@ -935,6 +1091,13 @@ export type CommercialFactSnapshot = z.infer<
   typeof commercialFactSnapshotSchema
 >;
 export type CommercialDecision = z.infer<typeof commercialDecisionSchema>;
+export type CommercialActionCandidate = z.infer<
+  typeof commercialActionCandidateSchema
+>;
+export type CommercialActionPlan = z.infer<typeof commercialActionPlanSchema>;
+export type CommercialActionQuestionCandidate = z.infer<
+  typeof commercialActionQuestionCandidateSchema
+>;
 export type CommercialDecisionContext = z.infer<
   typeof commercialDecisionContextSchema
 >;

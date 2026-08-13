@@ -22,6 +22,16 @@ export function registerCommercialRoutes(
   api.post("/commercial/leads/:id/facts", handler.recordFact);
   api.get("/commercial/leads/:id/facts", handler.listFacts);
   api.post("/commercial/leads/:id/decisions", handler.evaluateDecision);
+  api.post("/commercial/leads/:id/action-plans", handler.planAction);
+  api.get("/commercial/action-plans/:id", handler.getActionPlan);
+  api.post(
+    "/commercial/action-candidates/:id/decisions",
+    handler.evaluateActionCandidate,
+  );
+  api.post(
+    "/commercial/action-candidates/:id/applications",
+    handler.applyActionCandidate,
+  );
   api.get("/commercial/leads/:id/decision-context", handler.getDecisionContext);
   api.get("/commercial/decisions/:id", handler.getDecision);
   api.post("/commercial/conversations", handler.createConversation);

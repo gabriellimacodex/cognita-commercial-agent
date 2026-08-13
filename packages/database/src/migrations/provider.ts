@@ -20,6 +20,9 @@ import * as addCommercialDecisionIntegrity from "./017-add-commercial-decision-a
 import * as createCommercialInterpretationRuns from "./018-create-commercial-interpretation-runs.js";
 import * as createCommercialFactCandidatesAndEvidence from "./019-create-commercial-fact-candidates-and-evidence.js";
 import * as createCommercialCandidateResolutions from "./020-create-commercial-candidate-resolutions.js";
+import * as createCommercialActionPlans from "./021-create-commercial-action-plans.js";
+import * as createCommercialActionCandidates from "./022-create-commercial-action-candidates.js";
+import * as linkActionCandidatesToDecisions from "./023-link-action-candidates-to-decisions.js";
 
 export const migrationProvider: MigrationProvider = {
   getMigrations(): Promise<Record<string, Migration>> {
@@ -50,6 +53,11 @@ export const migrationProvider: MigrationProvider = {
         createCommercialFactCandidatesAndEvidence,
       "020_create_commercial_candidate_resolutions":
         createCommercialCandidateResolutions,
+      "021_create_commercial_action_plans": createCommercialActionPlans,
+      "022_create_commercial_action_candidates":
+        createCommercialActionCandidates,
+      "023_link_action_candidates_to_decisions":
+        linkActionCandidatesToDecisions,
     });
   },
 };

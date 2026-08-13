@@ -4,6 +4,7 @@ import { Redis } from "ioredis";
 
 import {
   checkDatabase,
+  CommercialActionPlanRepository,
   CommercialDecisionRepository,
   CommercialInterpretationRepository,
   CommercialRepository,
@@ -41,6 +42,9 @@ const queue = new BullMqFoundationQueue({ connection: redis });
 const repository = new FoundationJobRepository(database);
 const commercialRepository = new CommercialRepository(database);
 const commercialDecisionRepository = new CommercialDecisionRepository(database);
+const commercialActionPlanRepository = new CommercialActionPlanRepository(
+  database,
+);
 const commercialInterpretationRepository =
   new CommercialInterpretationRepository(database);
 const publisher = new BullMqFoundationJobPublisher(queue, repository, logger, {
@@ -52,6 +56,7 @@ const commercialService = new CommercialService(
   commercialRepository,
   commercialDecisionRepository,
   logger,
+  commercialActionPlanRepository,
 );
 const commercialInterpretationProvider =
   config.COMMERCIAL_INTERPRETATION_PROVIDER === "openai"
