@@ -51,3 +51,4 @@ Uma ADR `Accepted` não deve ser alterada materialmente. Criar nova ADR para sub
 | [013](013-external-language-model-processing-and-privacy-baseline.md) | External Language Model Processing and Privacy Baseline | Accepted |
 | [014](014-deterministic-evidence-alignment.md) | Deterministic Evidence Alignment for Commercial Interpretation | Accepted |
 | [015](015-complete-commercial-requirement-catalog.md) | Complete Commercial Requirement Catalog | Accepted |
+| [016](016-deterministic-commercial-action-planning-and-candidate-provenance.md) | Deterministic Commercial Action Planning and Candidate Provenance | Accepted |
