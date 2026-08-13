@@ -1,4 +1,8 @@
 import type {
+  CommercialActionCandidateType,
+  CommercialActionCapability,
+  CommercialActionPlanResult,
+  CommercialActionRationaleCode,
   CommercialDecisionOutcome,
   CommercialFactKey,
   CommercialHumanReasonCode,
@@ -244,6 +248,60 @@ export interface CommercialDecisionsTable {
   humanEvidenceType:
     "message" | "commercial_event" | "human_attestation" | null;
   humanEvidenceRef: string | null;
+  actionCandidateId: string | null;
+  recordedAt: Timestamp;
+}
+
+export interface CommercialActionPlansTable {
+  id: string;
+  organizationId: string;
+  leadId: string;
+  opportunityId: string | null;
+  objectiveKey: string;
+  objectiveVersion: string;
+  objectiveDigest: string;
+  plannerKey: string;
+  plannerVersion: string;
+  plannerDigest: string;
+  actionCatalogKey: string;
+  actionCatalogVersion: string;
+  actionCatalogDigest: string;
+  requirementPriorityKey: string;
+  requirementPriorityVersion: string;
+  requirementPriorityDigest: string;
+  inputFingerprint: string;
+  inputSnapshot: JSONColumnType<Record<string, unknown>, string, never>;
+  outputDigest: string;
+  resultType: CommercialActionPlanResult;
+  rationaleCodes: JSONColumnType<
+    CommercialActionRationaleCode[],
+    string,
+    never
+  >;
+  executorRef: string;
+  recordedAt: Timestamp;
+}
+
+export interface CommercialActionCandidatesTable {
+  id: string;
+  organizationId: string;
+  leadId: string;
+  opportunityId: string | null;
+  actionPlanId: string;
+  candidateType: CommercialActionCandidateType;
+  requestedAction:
+    | "create_opportunity"
+    | "transition_to_discovery"
+    | "transition_to_qualified";
+  requirementId: CommercialRequirementId | null;
+  requiredCapabilityKey: CommercialActionCapability;
+  decisionBasisFingerprint: string;
+  rationaleCodes: JSONColumnType<
+    CommercialActionRationaleCode[],
+    string,
+    never
+  >;
+  decisionReasonCodes: JSONColumnType<string[], string, never>;
   recordedAt: Timestamp;
 }
 
@@ -383,6 +441,8 @@ export interface DatabaseSchema {
   commercialFactCandidates: CommercialFactCandidatesTable;
   commercialEvidenceSpans: CommercialEvidenceSpansTable;
   commercialCandidateResolutions: CommercialCandidateResolutionsTable;
+  commercialActionPlans: CommercialActionPlansTable;
+  commercialActionCandidates: CommercialActionCandidatesTable;
 }
 
 export type FoundationJobRow = Selectable<FoundationJobsTable>;
@@ -399,6 +459,9 @@ export type LeadAssignmentRow = Selectable<LeadAssignmentsTable>;
 export type CommercialEventRow = Selectable<CommercialEventsTable>;
 export type CommercialFactRow = Selectable<CommercialFactsTable>;
 export type CommercialDecisionRow = Selectable<CommercialDecisionsTable>;
+export type CommercialActionPlanRow = Selectable<CommercialActionPlansTable>;
+export type CommercialActionCandidateRow =
+  Selectable<CommercialActionCandidatesTable>;
 export type CommercialInterpretationRunRow =
   Selectable<CommercialInterpretationRunsTable>;
 export type CommercialFactCandidateRow =

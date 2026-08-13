@@ -1,5 +1,6 @@
 import {
   getCommercialDecision,
+  getCommercialActionPlan,
   getDecisionContext,
   getCommercialInterpretation,
   getQuestionCandidates,
@@ -8,10 +9,13 @@ import {
 } from "../../lib/commercial-api";
 import {
   evaluateIntelligenceDecision,
+  applyPlannedCommercialAction,
   interpretSelectedCommercialMessage,
   prepareCommercialIntelligenceMessage,
+  prepareCommercialActionPlan,
   resolveIntelligenceCandidate,
   runCommercialVerticalSlice,
+  submitCommercialActionCandidate,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +28,8 @@ interface CommercialPageProperties {
     runId?: string;
     messageId?: string;
     baselineDecisionId?: string;
+    actionPlanId?: string;
+    applicationTargetId?: string;
   }>;
 }
 
@@ -50,9 +56,7 @@ export default async function CommercialPage({
     .flatMap((conversation) => conversation.messages)
     .find((message) => message.id === parameters.messageId);
   const humanReviewExercised =
-    timeline?.items.some(
-      (event) => event.eventType === "commercial_decision_escalated",
-    ) ?? false;
+    decisionContext?.latestDecision?.authorityType === "declared_human";
   const interpretation =
     parameters.organizationId != null && parameters.runId != null
       ? await getCommercialInterpretation(
@@ -72,6 +76,20 @@ export default async function CommercialPage({
       ? await getCommercialDecision(
           parameters.organizationId,
           parameters.baselineDecisionId,
+        ).catch(() => undefined)
+      : undefined;
+  const actionPlan =
+    parameters.organizationId != null && parameters.actionPlanId != null
+      ? await getCommercialActionPlan(
+          parameters.organizationId,
+          parameters.actionPlanId,
+        ).catch(() => undefined)
+      : undefined;
+  const actionDecision =
+    parameters.organizationId != null && actionPlan?.decisionId != null
+      ? await getCommercialDecision(
+          parameters.organizationId,
+          actionPlan.decisionId,
         ).catch(() => undefined)
       : undefined;
 
@@ -184,6 +202,155 @@ export default async function CommercialPage({
           <button type="submit">Create synthetic Message</button>
         </form>
       </section>
+
+      <section aria-labelledby="action-planning-title">
+        <h2 id="action-planning-title">Commercial Action Planning</h2>
+        <p>
+          Create an explicit deterministic Plan. Candidate, Decision and
+          application remain separate human-controlled steps.
+        </p>
+        <form action={prepareCommercialActionPlan}>
+          <label>
+            Synthetic scenario
+            <select name="planningScenario" defaultValue="material" required>
+              <option value="material">Material action ready</option>
+              <option value="review">Human review required</option>
+              <option value="missing">Missing requirement</option>
+            </select>
+          </label>
+          <button type="submit">Create Action Plan</button>
+        </form>
+      </section>
+
+      {actionPlan != null ? (
+        <section
+          data-testid="commercial-action-plan"
+          aria-labelledby="action-plan-result-title"
+        >
+          <h2 id="action-plan-result-title">Persisted Action Plan</h2>
+          <dl>
+            <dt>Plan</dt>
+            <dd>{actionPlan.id}</dd>
+            <dt>Objective</dt>
+            <dd data-testid="action-plan-objective">
+              {actionPlan.objective.key}@{actionPlan.objective.version}
+            </dd>
+            <dt>Planner</dt>
+            <dd>
+              {actionPlan.planner.key}@{actionPlan.planner.version}
+            </dd>
+            <dt>Currentness</dt>
+            <dd data-testid="action-plan-currentness">
+              {actionPlan.currentness}
+            </dd>
+            <dt>Result</dt>
+            <dd>{actionPlan.resultType}</dd>
+          </dl>
+          <p>Rationale: {actionPlan.rationaleCodes.join(", ")}</p>
+          {actionPlan.candidate != null ? (
+            <div data-testid="commercial-action-candidate">
+              <h3>Non-authoritative Candidate</h3>
+              <p>
+                {actionPlan.candidate.candidateType} ·{" "}
+                {actionPlan.candidate.requestedAction}
+              </p>
+              <p>{actionPlan.candidate.requiredCapabilityKey}</p>
+              {actionPlan.questionCandidate != null ? (
+                <p data-testid="action-question-candidate">
+                  {actionPlan.questionCandidate.requirementId}:{" "}
+                  {actionPlan.questionCandidate.text}
+                </p>
+              ) : null}
+              {actionPlan.decisionId == null &&
+              actionPlan.currentness === "current" &&
+              [
+                "review_commercial_exception_v1",
+                "submit_commercial_decision_v1",
+              ].includes(actionPlan.candidate.requiredCapabilityKey) ? (
+                <form action={submitCommercialActionCandidate}>
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={parameters.organizationId}
+                  />
+                  <input
+                    type="hidden"
+                    name="leadId"
+                    value={parameters.leadId}
+                  />
+                  <input
+                    type="hidden"
+                    name="actionPlanId"
+                    value={actionPlan.id}
+                  />
+                  <input
+                    type="hidden"
+                    name="candidateId"
+                    value={actionPlan.candidate.id}
+                  />
+                  <input
+                    type="hidden"
+                    name="requestedAction"
+                    value={actionPlan.candidate.requestedAction}
+                  />
+                  <input
+                    type="hidden"
+                    name="requiredCapabilityKey"
+                    value={actionPlan.candidate.requiredCapabilityKey}
+                  />
+                  <input
+                    type="hidden"
+                    name="reasonCode"
+                    value={
+                      actionPlan.candidate.decisionReasonCodes.find(
+                        (code) => code !== "human_authority_required",
+                      ) ?? ""
+                    }
+                  />
+                  <button type="submit">
+                    Submit Candidate to Decision Engine
+                  </button>
+                </form>
+              ) : null}
+              {actionDecision?.outcome === "allow" ? (
+                <form action={applyPlannedCommercialAction}>
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={parameters.organizationId}
+                  />
+                  <input
+                    type="hidden"
+                    name="leadId"
+                    value={parameters.leadId}
+                  />
+                  <input
+                    type="hidden"
+                    name="actionPlanId"
+                    value={actionPlan.id}
+                  />
+                  <input
+                    type="hidden"
+                    name="candidateId"
+                    value={actionPlan.candidate.id}
+                  />
+                  <button type="submit">Apply allowed Decision</button>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
+          {actionDecision != null ? (
+            <p data-testid="action-decision-outcome">
+              Decision: {actionDecision.outcome}
+            </p>
+          ) : null}
+          {parameters.applicationTargetId != null ? (
+            <p data-testid="action-application-receipt">
+              Applied target: {parameters.applicationTargetId}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {selectedMessage != null && interpretation == null ? (
         <section

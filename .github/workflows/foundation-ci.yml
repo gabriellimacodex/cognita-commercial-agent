@@ -92,13 +92,13 @@ jobs:
           pnpm db:migrate:down
           docker compose -f compose.yaml -f compose.dev.yaml exec -T postgres \
             psql -U cognita_foundation -d cognita_foundation -Atc \
-            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('organizations','foundation_jobs','commercial_commands','companies','contacts','leads','opportunities','conversations','messages','lead_assignments','commercial_events','commercial_facts','commercial_fact_corrections','commercial_decisions','commercial_decision_facts','commercial_decision_applications','commercial_interpretation_runs','commercial_fact_candidates','commercial_evidence_spans','commercial_candidate_resolutions');" \
+            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('organizations','foundation_jobs','commercial_commands','companies','contacts','leads','opportunities','conversations','messages','lead_assignments','commercial_events','commercial_facts','commercial_fact_corrections','commercial_decisions','commercial_decision_facts','commercial_decision_applications','commercial_interpretation_runs','commercial_fact_candidates','commercial_evidence_spans','commercial_candidate_resolutions','commercial_action_plans','commercial_action_candidates');" \
             | grep --fixed-strings --line-regexp "0"
           pnpm db:migrate
           docker compose -f compose.yaml -f compose.dev.yaml exec -T postgres \
             psql -U cognita_foundation -d cognita_foundation -Atc \
-            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('organizations','foundation_jobs','commercial_commands','companies','contacts','leads','opportunities','conversations','messages','lead_assignments','commercial_events','commercial_facts','commercial_fact_corrections','commercial_decisions','commercial_decision_facts','commercial_decision_applications','commercial_interpretation_runs','commercial_fact_candidates','commercial_evidence_spans','commercial_candidate_resolutions');" \
-            | grep --fixed-strings --line-regexp "20"
+            "select count(*) from information_schema.tables where table_schema='public' and table_name in ('organizations','foundation_jobs','commercial_commands','companies','contacts','leads','opportunities','conversations','messages','lead_assignments','commercial_events','commercial_facts','commercial_fact_corrections','commercial_decisions','commercial_decision_facts','commercial_decision_applications','commercial_interpretation_runs','commercial_fact_candidates','commercial_evidence_spans','commercial_candidate_resolutions','commercial_action_plans','commercial_action_candidates');" \
+            | grep --fixed-strings --line-regexp "22"
 
       - name: Run integration and failure tests
         run: pnpm test:integration

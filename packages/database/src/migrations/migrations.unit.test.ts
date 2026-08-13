@@ -27,6 +27,9 @@ describe("migrationProvider", () => {
       "018_create_commercial_interpretation_runs",
       "019_create_commercial_fact_candidates_and_evidence",
       "020_create_commercial_candidate_resolutions",
+      "021_create_commercial_action_plans",
+      "022_create_commercial_action_candidates",
+      "023_link_action_candidates_to_decisions",
     ]);
   });
 });

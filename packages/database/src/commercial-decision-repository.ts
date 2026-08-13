@@ -6,7 +6,9 @@ import type {
   CommercialFactSnapshot,
   CommercialRequirementId,
   CreateCommercialDecisionInput,
+  EvaluateCommercialActionCandidateInput,
 } from "@cognita/schemas";
+import { createCommercialDecisionInputSchema } from "@cognita/schemas";
 import { type Kysely, type Transaction, sql } from "kysely";
 
 import {
@@ -21,6 +23,10 @@ import {
   serializeOpportunity,
 } from "./commercial-repository.js";
 import { buildCommercialFactSnapshots } from "./commercial-fact-snapshot.js";
+import {
+  requireCurrentActionCandidate,
+  type ActionPlanner,
+} from "./commercial-action-plan-repository.js";
 import { serializeJsonb } from "./jsonb.js";
 import type {
   CommercialDecisionRow,
@@ -147,6 +153,7 @@ function serializeDecision(
       row.humanEvidenceType == null || row.humanEvidenceRef == null
         ? null
         : { type: row.humanEvidenceType, ref: row.humanEvidenceRef },
+    actionCandidateId: row.actionCandidateId,
     factIds,
     appliedAt: appliedAt == null ? null : iso(appliedAt),
     recordedAt: iso(row.recordedAt),
@@ -302,70 +309,101 @@ export class CommercialDecisionRepository {
         facts,
         now: new Date().toISOString(),
       });
-      const decisionId = randomUUID();
-      await transaction
-        .insertInto("commercialDecisions")
-        .values({
-          id: decisionId,
-          organizationId: input.organizationId,
-          leadId,
-          opportunityId: opportunity?.id ?? null,
-          decisionType: evaluation.decisionType,
-          requestedAction: input.requestedAction,
-          authorityType: input.authorityType,
-          authorityRef: input.authorityRef,
-          executorRef: input.executorRef,
-          policyKey: evaluation.policyKey,
-          policyVersion: evaluation.policyVersion,
-          policyDigest: evaluation.policyDigest,
-          decisionSchemaVersion: evaluation.decisionSchemaVersion,
-          inputFingerprint: evaluation.inputFingerprint,
-          inputSnapshot: serializeJsonb(evaluation.inputSnapshot),
-          outcome: evaluation.outcome,
-          eligibleActions: serializeJsonb(evaluation.eligibleActions),
-          blockedActions: serializeJsonb(evaluation.blockedActions),
-          missingRequirements: serializeJsonb(evaluation.missingRequirements),
-          requiredEvidence: serializeJsonb(evaluation.requiredEvidence),
-          reasonCodes: serializeJsonb(evaluation.reasonCodes),
-          escalationRequired: evaluation.escalationRequired,
-          humanReasonCode: input.reasonCode ?? null,
-          humanEvidenceType: input.evidence?.type ?? null,
-          humanEvidenceRef: input.evidence?.ref ?? null,
-        })
-        .execute();
-      if (evaluation.factIds.length > 0) {
-        const activeFacts = facts.flatMap((snapshot) => snapshot.facts);
-        const keyById = new Map(
-          activeFacts.map((fact) => [fact.id, fact.factKey]),
-        );
-        await transaction
-          .insertInto("commercialDecisionFacts")
-          .values(
-            evaluation.factIds.map((factId) => ({
-              organizationId: input.organizationId,
-              decisionId,
-              factId,
-              factKey: keyById.get(factId)!,
-            })),
-          )
-          .execute();
-      }
-      const eventId = await this.insertEvent(transaction, {
-        organizationId: input.organizationId,
-        subjectId: decisionId,
+      return this.persistDecision(
+        transaction,
         leadId,
-        eventType: evaluation.escalationRequired
-          ? "commercial_decision_escalated"
-          : "commercial_decision_evaluated",
-        actorRef: input.executorRef,
-        metadata: {
-          outcome: evaluation.outcome,
-          policyKey: evaluation.policyKey,
-          policyVersion: evaluation.policyVersion,
-          requestedAction: input.requestedAction,
-        },
+        input,
+        evaluation,
+        facts,
+        null,
+      );
+    });
+  }
+
+  public createDecisionFromActionCandidate(
+    command: CommercialCommandExecution,
+    candidateId: string,
+    authority: EvaluateCommercialActionCandidateInput,
+    evaluator: DecisionEvaluator,
+    planner: ActionPlanner,
+  ): Promise<CommandResult> {
+    return this.runCommand(command, async (transaction) => {
+      const current = await requireCurrentActionCandidate(
+        transaction,
+        authority.organizationId,
+        candidateId,
+        planner,
+      );
+      const candidate = current.candidate;
+      if (
+        candidate.candidateType === "collect_requirement" ||
+        candidate.requiredCapabilityKey ===
+          "resolve_commercial_fact_conflict_v1"
+      ) {
+        throw new CommercialConflictError(
+          "ACTION_CANDIDATE_NOT_ADMISSIBLE",
+          "Action Candidate requires information or Fact correction before a new Plan",
+        );
+      }
+      if (
+        candidate.requiredCapabilityKey === "review_commercial_exception_v1" &&
+        authority.authorityType !== "declared_human"
+      ) {
+        throw new CommercialConflictError(
+          "ACTION_CANDIDATE_HUMAN_AUTHORITY_REQUIRED",
+          "Review Candidate requires declared human authority",
+        );
+      }
+      if (
+        candidate.requiredCapabilityKey === "review_commercial_exception_v1" &&
+        authority.reasonCode !==
+          (candidate.requestedAction === "transition_to_qualified"
+            ? "human_qualification_confirmed"
+            : candidate.decisionReasonCodes.find(
+                (reason) => reason !== "human_authority_required",
+              ))
+      ) {
+        throw new CommercialConflictError(
+          "ACTION_CANDIDATE_HUMAN_REASON_INVALID",
+          "Human reason must resolve the review condition represented by the Candidate",
+        );
+      }
+      const parsed = createCommercialDecisionInputSchema.safeParse({
+        ...authority,
+        requestedAction: candidate.requestedAction,
+        ...(candidate.opportunityId == null
+          ? {}
+          : { opportunityId: candidate.opportunityId }),
       });
-      return { targetId: decisionId, eventId };
+      if (!parsed.success) {
+        throw new CommercialConflictError(
+          "ACTION_CANDIDATE_AUTHORITY_INVALID",
+          "Candidate authority does not satisfy the canonical Decision contract",
+        );
+      }
+      const input = parsed.data;
+      await this.validateEvidence(
+        transaction,
+        input.organizationId,
+        candidate.leadId,
+        input.evidence?.type ?? null,
+        input.evidence?.ref ?? null,
+      );
+      const evaluation = evaluator(input, current.context);
+      if (evaluation.inputFingerprint !== candidate.decisionBasisFingerprint) {
+        throw new CommercialConflictError(
+          "ACTION_CANDIDATE_DECISION_BASIS_STALE",
+          "Action Candidate no longer matches the canonical Decision basis",
+        );
+      }
+      return this.persistDecision(
+        transaction,
+        candidate.leadId,
+        input,
+        evaluation,
+        current.context.facts,
+        candidate.id,
+      );
     });
   }
 
@@ -521,6 +559,82 @@ export class CommercialDecisionRepository {
       .where("leadId", "=", leadId)
       .executeTakeFirst();
     if (event == null) throw new CommercialNotFoundError("Evidence Event");
+  }
+
+  private async persistDecision(
+    transaction: TransactionExecutor,
+    leadId: string,
+    input: CreateCommercialDecisionInput,
+    evaluation: DecisionEvaluationRecord,
+    facts: CommercialFactSnapshot[],
+    actionCandidateId: string | null,
+  ): Promise<{ targetId: string; eventId: string }> {
+    const decisionId = randomUUID();
+    await transaction
+      .insertInto("commercialDecisions")
+      .values({
+        id: decisionId,
+        organizationId: input.organizationId,
+        leadId,
+        opportunityId: input.opportunityId ?? null,
+        decisionType: evaluation.decisionType,
+        requestedAction: input.requestedAction,
+        authorityType: input.authorityType,
+        authorityRef: input.authorityRef,
+        executorRef: input.executorRef,
+        policyKey: evaluation.policyKey,
+        policyVersion: evaluation.policyVersion,
+        policyDigest: evaluation.policyDigest,
+        decisionSchemaVersion: evaluation.decisionSchemaVersion,
+        inputFingerprint: evaluation.inputFingerprint,
+        inputSnapshot: serializeJsonb(evaluation.inputSnapshot),
+        outcome: evaluation.outcome,
+        eligibleActions: serializeJsonb(evaluation.eligibleActions),
+        blockedActions: serializeJsonb(evaluation.blockedActions),
+        missingRequirements: serializeJsonb(evaluation.missingRequirements),
+        requiredEvidence: serializeJsonb(evaluation.requiredEvidence),
+        reasonCodes: serializeJsonb(evaluation.reasonCodes),
+        escalationRequired: evaluation.escalationRequired,
+        humanReasonCode: input.reasonCode ?? null,
+        humanEvidenceType: input.evidence?.type ?? null,
+        humanEvidenceRef: input.evidence?.ref ?? null,
+        actionCandidateId,
+      })
+      .execute();
+    if (evaluation.factIds.length > 0) {
+      const activeFacts = facts.flatMap((snapshot) => snapshot.facts);
+      const keyById = new Map(
+        activeFacts.map((fact) => [fact.id, fact.factKey]),
+      );
+      await transaction
+        .insertInto("commercialDecisionFacts")
+        .values(
+          evaluation.factIds.map((factId) => ({
+            organizationId: input.organizationId,
+            decisionId,
+            factId,
+            factKey: keyById.get(factId)!,
+          })),
+        )
+        .execute();
+    }
+    const eventId = await this.insertEvent(transaction, {
+      organizationId: input.organizationId,
+      subjectId: decisionId,
+      leadId,
+      eventType: evaluation.escalationRequired
+        ? "commercial_decision_escalated"
+        : "commercial_decision_evaluated",
+      actorRef: input.executorRef,
+      metadata: {
+        outcome: evaluation.outcome,
+        policyKey: evaluation.policyKey,
+        policyVersion: evaluation.policyVersion,
+        requestedAction: input.requestedAction,
+        actionCandidateId,
+      },
+    });
+    return { targetId: decisionId, eventId };
   }
 
   private async requireLeadLock(

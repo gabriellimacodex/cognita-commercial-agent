@@ -5,6 +5,7 @@ import {
   commercialCommandReceiptSchema,
   commercialDecisionContextSchema,
   commercialDecisionSchema,
+  commercialActionPlanSchema,
   commercialTimelineSchema,
   factCandidateSchema,
   interpretationRunSchema,
@@ -12,6 +13,7 @@ import {
   leadContextSchema,
   type CommercialCommandReceipt,
   type CommercialDecision,
+  type CommercialActionPlan,
   type CommercialDecisionContext,
   type CommercialTimeline,
   type LeadContext,
@@ -77,6 +79,69 @@ export async function executeCommercialDecision(
     },
   );
   return commercialDecisionSchema.parse(await parseResponse(response));
+}
+
+async function postCommercialResource<T>(
+  path: string,
+  payload: unknown,
+  parse: (body: unknown) => T,
+): Promise<T> {
+  const response = await fetch(`${apiUrl()}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": randomUUID(),
+      "x-correlation-id": randomUUID(),
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    signal: AbortSignal.timeout(5_000),
+  });
+  return parse(await parseResponse(response));
+}
+
+export function createCommercialActionPlan(
+  leadId: string,
+  payload: unknown,
+): Promise<CommercialActionPlan> {
+  return postCommercialResource(
+    `/commercial/leads/${encodeURIComponent(leadId)}/action-plans`,
+    payload,
+    (body) => commercialActionPlanSchema.parse(body),
+  );
+}
+
+export async function getCommercialActionPlan(
+  organizationId: string,
+  actionPlanId: string,
+): Promise<CommercialActionPlan> {
+  const response = await fetch(
+    `${apiUrl()}/commercial/action-plans/${encodeURIComponent(actionPlanId)}?organizationId=${encodeURIComponent(organizationId)}`,
+    { cache: "no-store", signal: AbortSignal.timeout(3_000) },
+  );
+  return commercialActionPlanSchema.parse(await parseResponse(response));
+}
+
+export function evaluateCommercialActionCandidate(
+  candidateId: string,
+  payload: unknown,
+): Promise<CommercialDecision> {
+  return postCommercialResource(
+    `/commercial/action-candidates/${encodeURIComponent(candidateId)}/decisions`,
+    payload,
+    (body) => commercialDecisionSchema.parse(body),
+  );
+}
+
+export function applyCommercialActionCandidate(
+  candidateId: string,
+  payload: unknown,
+): Promise<CommercialCommandReceipt> {
+  return postCommercialResource(
+    `/commercial/action-candidates/${encodeURIComponent(candidateId)}/applications`,
+    payload,
+    (body) => commercialCommandReceiptSchema.parse(body),
+  );
 }
 
 export async function startCommercialInterpretation(
