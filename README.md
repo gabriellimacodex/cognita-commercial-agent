@@ -3,11 +3,12 @@
 Fundação técnica e domínio comercial determinístico do Cognita Commercial
 Agent. O Épico 01 comprova a entrega durável de um job técnico; os Épicos 02 e
 03 acrescentam o domínio comercial, Facts auditáveis, policies versionadas e
-Decision Records, sem IA ou canais externos.
+Decision Records. O Épico 04 acrescenta interpretação sintética governada,
+Candidates não autoritativos, Evidence determinística e confirmação humana.
 
 Leia `AGENTS.md` antes de modificar o repositório. Decisões estruturais da
-fundação estão registradas nas ADRs 005, 006 e 007. O domínio e o engine
-comerciais seguem as ADRs 008, 009, 010 e 011.
+fundação estão registradas nas ADRs 005, 006 e 007. O domínio, o engine e a
+fronteira de interpretação comerciais seguem as ADRs 008 a 015.
 
 ## Vertical slice da fundação
 
@@ -30,6 +31,24 @@ aplicações e Commercial Events permanecem auditáveis após recarregar a pági
 `declared_human` não ignora integridade estrutural, conflito de Facts ou hard
 exclusion.
 
+## Vertical slice de inteligência comercial
+
+O fluxo sintético e governado é:
+
+`Message → Interpretation Run → Provider/Fake → Candidate → Evidence → revisão humana → Fact → Decision`
+
+O provider nunca cria Fact, Decision, Authority ou estado comercial. O servidor
+valida structured output, deriva offsets Unicode e digest da Evidence e persiste
+Candidates como propostas não autoritativas. Somente uma confirmação humana
+explícita cria um Fact. Question Candidates são projeções determinísticas e não
+persistidas dos requirement IDs canônicos.
+
+O Compose e o CI usam exclusivamente o fake provider. O adapter OpenAI aprovado
+usa `gpt-5.6-terra`, Responses API, schema strict, `store=false`, nenhuma tool,
+timeout de 20 segundos, zero retry e zero fallback. O rollout permanece
+exclusivamente sintético; dados reais, PII e informações comerciais reais não
+podem ser transmitidos ao provider.
+
 ## Estrutura implementada
 
 - `apps/api`: rotas Fastify, handlers HTTP e serviços de aplicação.
@@ -42,7 +61,8 @@ exclusion.
 - `tests`: integração real e E2E do cockpit.
 - `tools/governance`: tooling isolado do Cognita Engineering Framework.
 
-Não existem packages de IA ou de integrações. A tabela `organizations` delimita
+Não existem packages genéricos de IA ou de integrações. O adapter de linguagem
+permanece dentro do módulo comercial da API. A tabela `organizations` delimita
 as relações locais, mas não implementa autenticação, autorização ou
 multi-tenancy seguro.
 
@@ -119,5 +139,6 @@ do n8n e shutdown do worker.
 - AOF do Redis é opcional no override de desenvolvimento e não fornece a
   garantia de durabilidade do job.
 - Não existe deploy externo autorizado.
-- Não existem score, confidence, inferência por IA, LLM, CRM, WhatsApp ou
-  automação comercial externa nos Épicos 02 e 03.
+- Não existem score, confidence, CRM, WhatsApp ou automação comercial externa.
+- O uso do modelo externo é opt-in, sintético e local; a chave nunca pertence ao
+  Compose, ao browser, ao repositório ou ao CI.
