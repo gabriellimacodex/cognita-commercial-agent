@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 
 import {
+  applyCommercialActionCandidate,
+  createCommercialActionPlan,
+  evaluateCommercialActionCandidate,
   executeCommercialCommand,
   executeCommercialDecision,
   resolveCommercialCandidate,
@@ -358,5 +361,146 @@ export async function evaluateIntelligenceDecision(
   });
   redirect(
     `/commercial?organizationId=${encodeURIComponent(organizationId)}&leadId=${encodeURIComponent(leadId)}&messageId=${encodeURIComponent(messageId)}&runId=${encodeURIComponent(runId)}&baselineDecisionId=${encodeURIComponent(baselineDecisionId)}`,
+  );
+}
+
+export async function prepareCommercialActionPlan(
+  formData: FormData,
+): Promise<never> {
+  const scenario = required(formData, "planningScenario");
+  const organizationId = randomUUID();
+  const actorRef = "local-founder";
+  try {
+    await executeCommercialCommand("/commercial/organizations", "POST", {
+      organizationId,
+      name: "Synthetic Action Planning",
+      actorRef,
+    });
+    const contact = await executeCommercialCommand(
+      "/commercial/contacts",
+      "POST",
+      {
+        organizationId,
+        name: "Synthetic Planning Contact",
+        email: `${randomUUID()}@example.test`,
+        actorRef,
+      },
+    );
+    const lead = await executeCommercialCommand("/commercial/leads", "POST", {
+      organizationId,
+      contactId: contact.targetId,
+      source: "cockpit-action-planning",
+      actorRef,
+    });
+    if (scenario !== "missing") {
+      const facts = [
+        ["company_ownership_type", "private"],
+        ["has_existing_sales_process", true],
+        ["uses_crm", true],
+        ["seller_count", 3],
+        ["commercial_owner_defined", true],
+        ["has_recurring_inbound", true],
+        ["monthly_lead_volume", 500],
+        ["average_ticket_brl_cents", 500_000],
+        ["measures_conversion", scenario !== "review"],
+        ["roi_provable_within_90_days", true],
+        ["pain_confirmed", true],
+        ["pain_recurring", true],
+        ["pain_measurable", true],
+      ] as const;
+      for (const [factKey, value] of facts) {
+        await executeCommercialCommand(
+          `/commercial/leads/${lead.targetId}/facts`,
+          "POST",
+          {
+            organizationId,
+            factKey,
+            factSchemaVersion: 1,
+            value,
+            sourceType: "human_declaration",
+            sourceRef: actorRef,
+            declarerRef: actorRef,
+            executorRef: "cockpit-local",
+            observedAt: new Date().toISOString(),
+            ...(factKey.startsWith("pain_")
+              ? {
+                  evidence: {
+                    type: "human_attestation",
+                    ref: "cockpit-action-planning",
+                  },
+                }
+              : {}),
+          },
+        );
+      }
+    }
+    const plan = await createCommercialActionPlan(lead.targetId ?? "", {
+      organizationId,
+      executorRef: "cockpit-local",
+    });
+    redirect(
+      `/commercial?organizationId=${encodeURIComponent(organizationId)}&leadId=${encodeURIComponent(lead.targetId ?? "")}&actionPlanId=${encodeURIComponent(plan.id)}`,
+    );
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error != null &&
+      "digest" in error &&
+      typeof error.digest === "string" &&
+      error.digest.startsWith("NEXT_REDIRECT")
+    )
+      throw error;
+    redirect("/commercial?error=Commercial%20action%20planning%20failed");
+  }
+}
+
+export async function submitCommercialActionCandidate(
+  formData: FormData,
+): Promise<never> {
+  const organizationId = required(formData, "organizationId");
+  const leadId = required(formData, "leadId");
+  const actionPlanId = required(formData, "actionPlanId");
+  const candidateId = required(formData, "candidateId");
+  const requestedAction = required(formData, "requestedAction");
+  const capability = required(formData, "requiredCapabilityKey");
+  const human = capability === "review_commercial_exception_v1";
+  const reasonCode = formData.get("reasonCode");
+  await evaluateCommercialActionCandidate(candidateId, {
+    organizationId,
+    authorityType: human ? "declared_human" : "policy",
+    authorityRef: human
+      ? "local-founder"
+      : requestedAction === "create_opportunity"
+        ? "opportunity-eligibility@1.0.0"
+        : "commercial-state-gates@1.0.0",
+    executorRef: "cockpit-local",
+    ...(human && typeof reasonCode === "string"
+      ? {
+          reasonCode,
+          evidence: {
+            type: "human_attestation",
+            ref: "cockpit-action-review",
+          },
+        }
+      : {}),
+  });
+  redirect(
+    `/commercial?organizationId=${encodeURIComponent(organizationId)}&leadId=${encodeURIComponent(leadId)}&actionPlanId=${encodeURIComponent(actionPlanId)}`,
+  );
+}
+
+export async function applyPlannedCommercialAction(
+  formData: FormData,
+): Promise<never> {
+  const organizationId = required(formData, "organizationId");
+  const leadId = required(formData, "leadId");
+  const actionPlanId = required(formData, "actionPlanId");
+  const candidateId = required(formData, "candidateId");
+  const receipt = await applyCommercialActionCandidate(candidateId, {
+    organizationId,
+    executorRef: "cockpit-local",
+  });
+  redirect(
+    `/commercial?organizationId=${encodeURIComponent(organizationId)}&leadId=${encodeURIComponent(leadId)}&actionPlanId=${encodeURIComponent(actionPlanId)}&applicationTargetId=${encodeURIComponent(receipt.targetId ?? "")}`,
   );
 }
