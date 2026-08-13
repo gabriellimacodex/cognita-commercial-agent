@@ -4,6 +4,7 @@ import type {
   CommercialDecision,
   CommercialDecisionContext,
   CommercialFactSnapshot,
+  CommercialRequirementId,
   CreateCommercialDecisionInput,
 } from "@cognita/schemas";
 import { type Kysely, type Transaction, sql } from "kysely";
@@ -60,7 +61,7 @@ export interface DecisionEvaluationRecord {
   outcome: CommercialDecisionRow["outcome"];
   eligibleActions: CommercialDecisionRow["eligibleActions"];
   blockedActions: CommercialDecisionRow["blockedActions"];
-  missingRequirements: string[];
+  missingRequirements: CommercialRequirementId[];
   requiredEvidence: string[];
   reasonCodes: string[];
   escalationRequired: boolean;

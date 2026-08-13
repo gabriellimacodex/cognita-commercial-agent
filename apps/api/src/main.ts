@@ -5,6 +5,7 @@ import { Redis } from "ioredis";
 import {
   checkDatabase,
   CommercialDecisionRepository,
+  CommercialInterpretationRepository,
   CommercialRepository,
   createDatabase,
   FoundationJobRepository,
@@ -13,6 +14,11 @@ import { createLogger } from "@cognita/observability";
 
 import { FoundationJobService } from "./application/foundation-job-service.js";
 import { CommercialService } from "./commercial/commercial-service.js";
+import { CommercialInterpretationService } from "./commercial/commercial-interpretation-service.js";
+import {
+  FakeCommercialInterpretationProvider,
+  OpenAiCommercialInterpretationProvider,
+} from "./commercial/commercial-interpretation-provider.js";
 import { readApiConfig } from "./config.js";
 import { BullMqFoundationQueue } from "./infrastructure/bullmq-queue.js";
 import { BullMqFoundationJobPublisher } from "./infrastructure/foundation-job-publisher.js";
@@ -35,6 +41,8 @@ const queue = new BullMqFoundationQueue({ connection: redis });
 const repository = new FoundationJobRepository(database);
 const commercialRepository = new CommercialRepository(database);
 const commercialDecisionRepository = new CommercialDecisionRepository(database);
+const commercialInterpretationRepository =
+  new CommercialInterpretationRepository(database);
 const publisher = new BullMqFoundationJobPublisher(queue, repository, logger, {
   retryAfterMs: config.JOB_PUBLISH_RETRY_MS,
   staleAfterMs: config.JOB_STALE_AFTER_MS,
@@ -45,9 +53,21 @@ const commercialService = new CommercialService(
   commercialDecisionRepository,
   logger,
 );
+const commercialInterpretationProvider =
+  config.COMMERCIAL_INTERPRETATION_PROVIDER === "openai"
+    ? new OpenAiCommercialInterpretationProvider(config.OPENAI_API_KEY!)
+    : new FakeCommercialInterpretationProvider();
+const commercialInterpretationService = new CommercialInterpretationService(
+  commercialInterpretationRepository,
+  commercialDecisionRepository,
+  commercialInterpretationProvider,
+  logger,
+);
 const api = await buildApi({
   service,
   commercialService,
+  commercialInterpretationService,
+  rateLimitMax: config.API_RATE_LIMIT_MAX,
   checkDatabase: async () => checkDatabase(database),
   checkRedis: async () => {
     await redis.ping();

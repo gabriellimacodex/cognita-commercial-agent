@@ -3,6 +3,8 @@ import type {
   CommercialFactKey,
   CommercialHumanReasonCode,
   CommercialRequestedAction,
+  CommercialRequirementId,
+  ProviderFactCandidate,
   CommercialEventType,
   FoundationJobInput,
   FoundationJobStatus,
@@ -234,7 +236,7 @@ export interface CommercialDecisionsTable {
     string,
     never
   >;
-  missingRequirements: JSONColumnType<string[], string, never>;
+  missingRequirements: JSONColumnType<CommercialRequirementId[], string, never>;
   requiredEvidence: JSONColumnType<string[], string, never>;
   reasonCodes: JSONColumnType<string[], string, never>;
   escalationRequired: boolean;
@@ -263,6 +265,103 @@ export interface CommercialDecisionApplicationsTable {
   appliedAt: Timestamp;
 }
 
+export interface CommercialInterpretationRunsTable {
+  id: string;
+  organizationId: string;
+  leadId: string;
+  conversationId: string;
+  messageId: string;
+  status: Generated<"running" | "completed" | "failed">;
+  idempotencyKey: string;
+  requestHash: string;
+  providerId: "openai";
+  modelId: "gpt-5.6-terra";
+  returnedModelId: "gpt-5.6-terra" | null;
+  instructionKey: string;
+  instructionVersion: string;
+  instructionDigest: string;
+  outputSchemaVersion: number;
+  outputSchemaDigest: string;
+  invocationConfig: JSONColumnType<
+    {
+      endpoint: "https://api.openai.com/v1/responses";
+      reasoningEffort: "none";
+      maxOutputTokens: 1200;
+      store: false;
+      background: false;
+      tools: false;
+      timeoutMs: 20000;
+      automaticRetries: 0;
+      fallback: false;
+    },
+    string,
+    never
+  >;
+  providerRequestId: string | null;
+  durationMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  outputDigest: string | null;
+  failureCode:
+    "provider_timeout" | "provider_error" | "invalid_structured_output" | null;
+  reprocessesRunId: string | null;
+  startedAt: Timestamp;
+  completedAt: Date | null;
+  failedAt: Date | null;
+}
+
+export interface CommercialFactCandidatesTable {
+  id: string;
+  organizationId: string;
+  leadId: string;
+  interpretationRunId: string;
+  messageId: string;
+  factKey: CommercialFactKey;
+  factSchemaVersion: number;
+  valueType: "boolean" | "integer" | "string" | "timestamp" | null;
+  proposedValue: ColumnType<unknown, string | null, never>;
+  classification: "reviewable" | "ambiguous" | "invalid" | "duplicate";
+  ambiguityCode: ProviderFactCandidate["ambiguityCode"];
+  ambiguityDetails: JSONColumnType<
+    {
+      minimum: number | null;
+      maximum: number | null;
+      note: string | null;
+    } | null,
+    string | null,
+    never
+  >;
+  validationCode: string | null;
+  duplicateOfCandidateId: string | null;
+  createdAt: Timestamp;
+}
+
+export interface CommercialEvidenceSpansTable {
+  id: string;
+  organizationId: string;
+  candidateId: string;
+  messageId: string;
+  evidenceType: "message_text_span";
+  startOffset: number;
+  endOffset: number;
+  spanDigest: string;
+  createdAt: Timestamp;
+}
+
+export interface CommercialCandidateResolutionsTable {
+  id: string;
+  organizationId: string;
+  candidateId: string;
+  resolutionType: "confirmed" | "rejected";
+  confirmationMode: "assert" | "correct" | null;
+  rejectionReasonCode: string | null;
+  authorityType: "declared_human";
+  authorityRef: string;
+  executorRef: string;
+  commercialFactId: string | null;
+  resolvedAt: Timestamp;
+}
+
 export interface DatabaseSchema {
   organizations: OrganizationsTable;
   foundationJobs: FoundationJobsTable;
@@ -280,6 +379,10 @@ export interface DatabaseSchema {
   commercialDecisions: CommercialDecisionsTable;
   commercialDecisionFacts: CommercialDecisionFactsTable;
   commercialDecisionApplications: CommercialDecisionApplicationsTable;
+  commercialInterpretationRuns: CommercialInterpretationRunsTable;
+  commercialFactCandidates: CommercialFactCandidatesTable;
+  commercialEvidenceSpans: CommercialEvidenceSpansTable;
+  commercialCandidateResolutions: CommercialCandidateResolutionsTable;
 }
 
 export type FoundationJobRow = Selectable<FoundationJobsTable>;
@@ -296,3 +399,11 @@ export type LeadAssignmentRow = Selectable<LeadAssignmentsTable>;
 export type CommercialEventRow = Selectable<CommercialEventsTable>;
 export type CommercialFactRow = Selectable<CommercialFactsTable>;
 export type CommercialDecisionRow = Selectable<CommercialDecisionsTable>;
+export type CommercialInterpretationRunRow =
+  Selectable<CommercialInterpretationRunsTable>;
+export type CommercialFactCandidateRow =
+  Selectable<CommercialFactCandidatesTable>;
+export type CommercialEvidenceSpanRow =
+  Selectable<CommercialEvidenceSpansTable>;
+export type CommercialCandidateResolutionRow =
+  Selectable<CommercialCandidateResolutionsTable>;

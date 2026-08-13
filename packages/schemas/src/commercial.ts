@@ -30,6 +30,12 @@ export const commercialEventTypeSchema = z.enum([
   "commercial_decision_escalated",
   "commercial_decision_stale",
   "commercial_decision_applied",
+  "commercial_interpretation_started",
+  "commercial_interpretation_completed",
+  "commercial_interpretation_failed",
+  "commercial_fact_candidate_created",
+  "commercial_fact_candidate_confirmed",
+  "commercial_fact_candidate_rejected",
 ]);
 
 const actorRefSchema = z.string().trim().min(1).max(160);
@@ -75,6 +81,37 @@ export const commercialDecisionOutcomeSchema = z.enum([
   "block",
   "require_information",
   "require_human_review",
+]);
+
+export const commercialRequirementIdSchema = z.enum([
+  "lead_is_open",
+  "opportunity_does_not_exist",
+  "contact_has_reachable_channel",
+  "facts_are_consistent",
+  "company_ownership_type_known",
+  "crm_usage_known",
+  "sales_capacity_known",
+  "recurring_inbound_known",
+  "conversion_measurement_known",
+  "sales_process_known",
+  "commercial_owner_known",
+  "lead_volume_known",
+  "average_ticket_known",
+  "roi_measurement_known",
+  "pain_confirmed_with_evidence",
+  "pain_recurring_with_evidence",
+  "pain_measurable_with_evidence",
+  "decision_maker_access_known",
+  "budget_known",
+  "operational_capacity_known",
+  "timing_known",
+  "nurture_revisit_date_known",
+  "nurture_return_condition_known",
+  "human_authority_declared",
+  "terminal_reason_from_catalog",
+  "terminal_evidence_present",
+  "decision_input_is_current",
+  "decision_has_not_been_applied",
 ]);
 
 export const commercialAuthorityTypeSchema = z.enum([
@@ -452,6 +489,212 @@ export const commercialFactSnapshotSchema = z.object({
   facts: z.array(commercialFactSchema),
 });
 
+export const interpretationRunStatusSchema = z.enum([
+  "running",
+  "completed",
+  "failed",
+]);
+export const factCandidateClassificationSchema = z.enum([
+  "reviewable",
+  "ambiguous",
+  "invalid",
+  "duplicate",
+]);
+export const commercialAmbiguityCodeSchema = z.enum([
+  "numeric_range",
+  "uncertain_language",
+  "multiple_possible_values",
+  "unclear_negation",
+  "insufficient_context",
+]);
+export const candidateValidationCodeSchema = z.enum([
+  "invalid_fact_value",
+  "invalid_candidate_semantics",
+  "evidence_quote_empty",
+  "evidence_quote_not_found",
+  "evidence_quote_multiple_matches",
+  "evidence_quote_round_trip_mismatch",
+]);
+export const candidateRejectionReasonSchema = z.enum([
+  "incorrect_extraction",
+  "insufficient_evidence",
+  "ambiguous_statement",
+  "outdated_information",
+  "duplicate_candidate",
+  "not_applicable",
+]);
+
+const ambiguityDetailsSchema = z
+  .object({
+    minimum: z.number().int().nullable(),
+    maximum: z.number().int().nullable(),
+    note: z.string().max(200).nullable(),
+  })
+  .strict();
+
+export const providerFactCandidateSchema = z
+  .object({
+    factKey: commercialFactKeySchema,
+    proposedValue: commercialFactValueSchema.nullable(),
+    classification: z.enum(["reviewable", "ambiguous"]),
+    ambiguityCode: commercialAmbiguityCodeSchema.nullable(),
+    ambiguityDetails: ambiguityDetailsSchema.nullable(),
+    evidenceQuote: z.string().min(1).max(800),
+  })
+  .strict()
+  .superRefine((candidate, context) => {
+    const isReviewable = candidate.classification === "reviewable";
+    if (
+      isReviewable !== (candidate.proposedValue != null) ||
+      isReviewable !== (candidate.ambiguityCode == null) ||
+      (isReviewable && candidate.ambiguityDetails != null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Candidate classification fields are inconsistent",
+      });
+    }
+    if (
+      candidate.ambiguityCode === "numeric_range" &&
+      (candidate.ambiguityDetails?.minimum == null ||
+        candidate.ambiguityDetails.maximum == null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Numeric ranges require minimum and maximum",
+      });
+    }
+  });
+
+export const providerInterpretationOutputSchema = z
+  .object({
+    candidates: z.array(providerFactCandidateSchema).max(8),
+  })
+  .strict();
+
+export const evidenceSpanSchema = z.object({
+  id: z.uuid(),
+  candidateId: z.uuid(),
+  messageId: z.uuid(),
+  evidenceType: z.literal("message_text_span"),
+  startOffset: z.number().int().nonnegative(),
+  endOffset: z.number().int().positive(),
+  spanDigest: z.string().regex(/^[0-9a-f]{64}$/),
+  createdAt: z.iso.datetime(),
+});
+
+export const factCandidateSchema = z.object({
+  id: z.uuid(),
+  organizationId: z.uuid(),
+  leadId: z.uuid(),
+  interpretationRunId: z.uuid(),
+  messageId: z.uuid(),
+  factKey: commercialFactKeySchema,
+  factSchemaVersion: z.literal(1),
+  valueType: z.enum(["boolean", "integer", "string", "timestamp"]).nullable(),
+  proposedValue: commercialFactValueSchema.nullable(),
+  classification: factCandidateClassificationSchema,
+  ambiguityCode: commercialAmbiguityCodeSchema.nullable(),
+  ambiguityDetails: ambiguityDetailsSchema.nullable(),
+  validationCode: candidateValidationCodeSchema.nullable(),
+  duplicateOfCandidateId: z.uuid().nullable(),
+  status: z.enum([
+    "pending_confirmation",
+    "ambiguous",
+    "invalid",
+    "duplicate",
+    "confirmed",
+    "rejected",
+  ]),
+  evidence: evidenceSpanSchema.nullable(),
+  createdAt: z.iso.datetime(),
+});
+
+export const interpretationRunSchema = z.object({
+  id: z.uuid(),
+  organizationId: z.uuid(),
+  leadId: z.uuid(),
+  conversationId: z.uuid(),
+  messageId: z.uuid(),
+  status: interpretationRunStatusSchema,
+  providerId: z.literal("openai"),
+  modelId: z.literal("gpt-5.6-terra"),
+  returnedModelId: z.literal("gpt-5.6-terra").nullable(),
+  instructionKey: z.string(),
+  instructionVersion: z.string(),
+  instructionDigest: z.string().regex(/^[0-9a-f]{64}$/),
+  outputSchemaVersion: z.literal(1),
+  outputSchemaDigest: z.string().regex(/^[0-9a-f]{64}$/),
+  invocationConfig: z.object({
+    endpoint: z.literal("https://api.openai.com/v1/responses"),
+    reasoningEffort: z.literal("none"),
+    maxOutputTokens: z.literal(1200),
+    store: z.literal(false),
+    background: z.literal(false),
+    tools: z.literal(false),
+    timeoutMs: z.literal(20_000),
+    automaticRetries: z.literal(0),
+    fallback: z.literal(false),
+  }),
+  providerRequestId: z.string().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  inputTokens: z.number().int().nonnegative().nullable(),
+  outputTokens: z.number().int().nonnegative().nullable(),
+  outputDigest: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable(),
+  failureCode: z
+    .enum(["provider_timeout", "provider_error", "invalid_structured_output"])
+    .nullable(),
+  reprocessesRunId: z.uuid().nullable(),
+  candidates: z.array(factCandidateSchema),
+  startedAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().nullable(),
+  failedAt: z.iso.datetime().nullable(),
+});
+
+export const startInterpretationInputSchema = z.object({
+  organizationId: z.uuid(),
+  executorRef: actorRefSchema,
+  reprocessesRunId: z.uuid().optional(),
+});
+
+export const confirmFactCandidateInputSchema = z
+  .object({
+    organizationId: z.uuid(),
+    authorityType: z.literal("declared_human"),
+    authorityRef: actorRefSchema,
+    executorRef: actorRefSchema,
+    mode: z.enum(["assert", "correct"]),
+    correctsFactIds: z.array(z.uuid()).max(100).default([]),
+  })
+  .superRefine((input, context) => {
+    if ((input.mode === "correct") !== input.correctsFactIds.length > 0) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "correct requires the complete active Fact set; assert forbids corrections",
+      });
+    }
+  });
+
+export const rejectFactCandidateInputSchema = z.object({
+  organizationId: z.uuid(),
+  authorityType: z.literal("declared_human"),
+  authorityRef: actorRefSchema,
+  executorRef: actorRefSchema,
+  reasonCode: candidateRejectionReasonSchema,
+});
+
+export const questionCandidateSchema = z.object({
+  requirementId: commercialRequirementIdSchema,
+  templateKey: z.string(),
+  templateVersion: z.literal("1.0.0"),
+  text: z.string(),
+  decisionId: z.uuid(),
+});
+
 export const commercialDecisionSchema = z.object({
   id: z.uuid(),
   organizationId: z.uuid(),
@@ -480,7 +723,7 @@ export const commercialDecisionSchema = z.object({
       reasonCodes: z.array(z.string()),
     }),
   ),
-  missingRequirements: z.array(z.string()),
+  missingRequirements: z.array(commercialRequirementIdSchema),
   requiredEvidence: z.array(z.string()),
   reasonCodes: z.array(z.string()),
   escalationRequired: z.boolean(),
@@ -636,6 +879,9 @@ export type CommercialRequestedAction = z.infer<
 export type CommercialDecisionOutcome = z.infer<
   typeof commercialDecisionOutcomeSchema
 >;
+export type CommercialRequirementId = z.infer<
+  typeof commercialRequirementIdSchema
+>;
 export type CommercialAuthorityType = z.infer<
   typeof commercialAuthorityTypeSchema
 >;
@@ -692,3 +938,19 @@ export type CommercialDecision = z.infer<typeof commercialDecisionSchema>;
 export type CommercialDecisionContext = z.infer<
   typeof commercialDecisionContextSchema
 >;
+export type ProviderFactCandidate = z.infer<typeof providerFactCandidateSchema>;
+export type ProviderInterpretationOutput = z.infer<
+  typeof providerInterpretationOutputSchema
+>;
+export type FactCandidate = z.infer<typeof factCandidateSchema>;
+export type InterpretationRun = z.infer<typeof interpretationRunSchema>;
+export type StartInterpretationInput = z.infer<
+  typeof startInterpretationInputSchema
+>;
+export type ConfirmFactCandidateInput = z.infer<
+  typeof confirmFactCandidateInputSchema
+>;
+export type RejectFactCandidateInput = z.infer<
+  typeof rejectFactCandidateInputSchema
+>;
+export type QuestionCandidate = z.infer<typeof questionCandidateSchema>;

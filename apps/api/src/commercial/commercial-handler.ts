@@ -7,6 +7,9 @@ import {
   commercialDecisionContextSchema,
   commercialDecisionSchema,
   commercialFactSnapshotSchema,
+  factCandidateSchema,
+  interpretationRunSchema,
+  questionCandidateSchema,
   commercialTimelineSchema,
   companySchema,
   contactSchema,
@@ -27,9 +30,13 @@ import {
   opportunitySchema,
   organizationSchema,
   transitionOpportunityInputSchema,
+  startInterpretationInputSchema,
+  confirmFactCandidateInputSchema,
+  rejectFactCandidateInputSchema,
 } from "@cognita/schemas";
 
 import type { CommercialService } from "./commercial-service.js";
+import type { CommercialInterpretationService } from "./commercial-interpretation-service.js";
 
 const idempotencyKeySchema = z.string().trim().min(1).max(255);
 const idParamsSchema = z.object({ id: z.uuid() });
@@ -82,7 +89,132 @@ function parseId(
 }
 
 export class CommercialHandler {
-  public constructor(private readonly service: CommercialService) {}
+  public constructor(
+    private readonly service: CommercialService,
+    private readonly interpretationService?: CommercialInterpretationService,
+  ) {}
+
+  public startInterpretation = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const parsed = parseCommand(request, reply, startInterpretationInputSchema);
+    if (id == null || parsed == null || this.interpretationService == null)
+      return;
+    const run = await this.interpretationService.start(
+      id,
+      parsed.input,
+      parsed.idempotencyKey,
+      request.id,
+    );
+    await reply
+      .status(run.status === "running" ? 202 : 200)
+      .send(interpretationRunSchema.parse(run));
+  };
+
+  public getInterpretation = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const query = organizationQuerySchema.safeParse(request.query);
+    if (id == null || !query.success || this.interpretationService == null) {
+      if (!query.success)
+        validationError(request, reply, "INVALID_ORGANIZATION_QUERY");
+      return;
+    }
+    await reply.send(
+      interpretationRunSchema.parse(
+        await this.interpretationService.get(query.data.organizationId, id),
+      ),
+    );
+  };
+
+  public listInterpretations = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const query = organizationQuerySchema.safeParse(request.query);
+    if (id == null || !query.success || this.interpretationService == null) {
+      if (!query.success)
+        validationError(request, reply, "INVALID_ORGANIZATION_QUERY");
+      return;
+    }
+    await reply.send(
+      z
+        .array(interpretationRunSchema)
+        .parse(
+          await this.interpretationService.list(query.data.organizationId, id),
+        ),
+    );
+  };
+
+  public confirmCandidate = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const parsed = parseCommand(
+      request,
+      reply,
+      confirmFactCandidateInputSchema,
+    );
+    if (id == null || parsed == null || this.interpretationService == null)
+      return;
+    await reply.send(
+      factCandidateSchema.parse(
+        await this.interpretationService.confirm(
+          id,
+          parsed.input,
+          parsed.idempotencyKey,
+        ),
+      ),
+    );
+  };
+
+  public rejectCandidate = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const parsed = parseCommand(request, reply, rejectFactCandidateInputSchema);
+    if (id == null || parsed == null || this.interpretationService == null)
+      return;
+    await reply.send(
+      factCandidateSchema.parse(
+        await this.interpretationService.reject(
+          id,
+          parsed.input,
+          parsed.idempotencyKey,
+        ),
+      ),
+    );
+  };
+
+  public listQuestionCandidates = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const id = parseId(request, reply);
+    const query = organizationQuerySchema.safeParse(request.query);
+    if (id == null || !query.success || this.interpretationService == null) {
+      if (!query.success)
+        validationError(request, reply, "INVALID_ORGANIZATION_QUERY");
+      return;
+    }
+    await reply.send(
+      z
+        .array(questionCandidateSchema)
+        .parse(
+          await this.interpretationService.questionCandidates(
+            query.data.organizationId,
+            id,
+          ),
+        ),
+    );
+  };
 
   public createOrganization = async (
     request: FastifyRequest,

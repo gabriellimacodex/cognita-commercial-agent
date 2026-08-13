@@ -51,11 +51,13 @@ services:
       SERVICE_VERSION: 0.1.0
       API_HOST: 0.0.0.0
       API_PORT: 3001
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-100}
       DATABASE_URL: postgresql://${POSTGRES_USER:-cognita_foundation}:${POSTGRES_PASSWORD:-local_only_not_a_secret}@postgres:5432/${POSTGRES_DB:-cognita_foundation}
       REDIS_URL: redis://redis:6379
       LOG_LEVEL: ${LOG_LEVEL:-info}
       JOB_PUBLISH_RETRY_MS: ${JOB_PUBLISH_RETRY_MS:-1000}
       JOB_STALE_AFTER_MS: ${JOB_STALE_AFTER_MS:-5000}
+      COMMERCIAL_INTERPRETATION_PROVIDER: fake
     ports:
       - "127.0.0.1:3001:3001"
     healthcheck:

@@ -130,6 +130,13 @@ button {
   cursor: pointer;
 }
 
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 dl {
   display: grid;
   grid-template-columns: minmax(130px, 180px) 1fr;

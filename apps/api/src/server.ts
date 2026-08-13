@@ -25,12 +25,18 @@ import {
 } from "./commercial/commercial-domain.js";
 import { CommercialHandler } from "./commercial/commercial-handler.js";
 import { InvalidCommercialFactError } from "./commercial/commercial-fact-catalog.js";
-import { registerCommercialRoutes } from "./commercial/commercial-routes.js";
+import {
+  registerCommercialInterpretationRoutes,
+  registerCommercialRoutes,
+} from "./commercial/commercial-routes.js";
 import type { CommercialService } from "./commercial/commercial-service.js";
+import type { CommercialInterpretationService } from "./commercial/commercial-interpretation-service.js";
 
 export interface ApiDependencies {
   service: FoundationJobApplicationService;
   commercialService?: CommercialService;
+  commercialInterpretationService?: CommercialInterpretationService;
+  rateLimitMax?: number;
   checkDatabase(): Promise<void>;
   checkRedis(): Promise<void>;
   logger: Logger;
@@ -59,7 +65,7 @@ export async function buildApi(
 
   await api.register(rateLimit, {
     global: true,
-    max: 100,
+    max: dependencies.rateLimitMax ?? 100,
     timeWindow: "1 minute",
   });
 
@@ -67,10 +73,14 @@ export async function buildApi(
   const healthHandler = new HealthHandler(dependencies);
   registerFoundationJobRoutes(api, foundationJobHandler);
   if (dependencies.commercialService != null) {
-    registerCommercialRoutes(
-      api,
-      new CommercialHandler(dependencies.commercialService),
+    const commercialHandler = new CommercialHandler(
+      dependencies.commercialService,
+      dependencies.commercialInterpretationService,
     );
+    registerCommercialRoutes(api, commercialHandler);
+    if (dependencies.commercialInterpretationService != null) {
+      registerCommercialInterpretationRoutes(api, commercialHandler);
+    }
   }
   api.get("/health", healthHandler.get);
 

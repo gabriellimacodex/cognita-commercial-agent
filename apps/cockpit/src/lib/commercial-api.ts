@@ -6,12 +6,18 @@ import {
   commercialDecisionContextSchema,
   commercialDecisionSchema,
   commercialTimelineSchema,
+  factCandidateSchema,
+  interpretationRunSchema,
+  questionCandidateSchema,
   leadContextSchema,
   type CommercialCommandReceipt,
   type CommercialDecision,
   type CommercialDecisionContext,
   type CommercialTimeline,
   type LeadContext,
+  type FactCandidate,
+  type InterpretationRun,
+  type QuestionCandidate,
 } from "@cognita/schemas";
 
 function apiUrl(): string {
@@ -68,6 +74,91 @@ export async function executeCommercialDecision(
       body: JSON.stringify(payload),
       cache: "no-store",
       signal: AbortSignal.timeout(5_000),
+    },
+  );
+  return commercialDecisionSchema.parse(await parseResponse(response));
+}
+
+export async function startCommercialInterpretation(
+  messageId: string,
+  payload: unknown,
+): Promise<InterpretationRun> {
+  const response = await fetch(
+    `${apiUrl()}/commercial/messages/${encodeURIComponent(messageId)}/interpretations`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": randomUUID(),
+        "x-correlation-id": randomUUID(),
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: AbortSignal.timeout(25_000),
+    },
+  );
+  return interpretationRunSchema.parse(await parseResponse(response));
+}
+
+export async function getCommercialInterpretation(
+  organizationId: string,
+  runId: string,
+): Promise<InterpretationRun> {
+  const response = await fetch(
+    `${apiUrl()}/commercial/interpretations/${encodeURIComponent(runId)}?organizationId=${encodeURIComponent(organizationId)}`,
+    {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3_000),
+    },
+  );
+  return interpretationRunSchema.parse(await parseResponse(response));
+}
+
+export async function resolveCommercialCandidate(
+  candidateId: string,
+  resolution: "confirm" | "reject",
+  payload: unknown,
+): Promise<FactCandidate> {
+  const response = await fetch(
+    `${apiUrl()}/commercial/fact-candidates/${encodeURIComponent(candidateId)}/${resolution}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": randomUUID(),
+        "x-correlation-id": randomUUID(),
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    },
+  );
+  return factCandidateSchema.parse(await parseResponse(response));
+}
+
+export async function getQuestionCandidates(
+  organizationId: string,
+  leadId: string,
+): Promise<QuestionCandidate[]> {
+  const response = await fetch(
+    `${apiUrl()}/commercial/leads/${encodeURIComponent(leadId)}/question-candidates?organizationId=${encodeURIComponent(organizationId)}`,
+    {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3_000),
+    },
+  );
+  return questionCandidateSchema.array().parse(await parseResponse(response));
+}
+
+export async function getCommercialDecision(
+  organizationId: string,
+  decisionId: string,
+): Promise<CommercialDecision> {
+  const response = await fetch(
+    `${apiUrl()}/commercial/decisions/${encodeURIComponent(decisionId)}?organizationId=${encodeURIComponent(organizationId)}`,
+    {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3_000),
     },
   );
   return commercialDecisionSchema.parse(await parseResponse(response));

@@ -34,3 +34,24 @@ export function registerCommercialRoutes(
     handler.transitionOpportunity,
   );
 }
+
+export function registerCommercialInterpretationRoutes(
+  api: FastifyInstance,
+  handler: CommercialHandler,
+): void {
+  api.get(
+    "/commercial/leads/:id/question-candidates",
+    handler.listQuestionCandidates,
+  );
+  api.post(
+    "/commercial/messages/:id/interpretations",
+    handler.startInterpretation,
+  );
+  api.get(
+    "/commercial/messages/:id/interpretations",
+    handler.listInterpretations,
+  );
+  api.get("/commercial/interpretations/:id", handler.getInterpretation);
+  api.post("/commercial/fact-candidates/:id/confirm", handler.confirmCandidate);
+  api.post("/commercial/fact-candidates/:id/reject", handler.rejectCandidate);
+}
